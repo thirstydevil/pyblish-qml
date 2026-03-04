@@ -7,8 +7,31 @@ import traceback
 from functools import wraps
 
 from .vendor import six
-from .vendor.Qt5 import QtCore
+from .vendor.Qt import QtCore
 
+# Qt6 may place state machine classes outside QtCore and Qt.py may not expose
+# QtStateMachine depending on binding/version, so backfill explicitly.
+if not hasattr(QtCore, "QState") or not hasattr(QtCore, "QStateMachine"):
+    _state_module = None
+
+    try:
+        from .vendor.Qt import QtStateMachine as _state_module
+    except ImportError:
+        _state_module = None
+
+    if _state_module is None:
+        try:
+            from PySide6 import QtStateMachine as _state_module
+        except ImportError:
+            _state_module = None
+
+    if _state_module is not None:
+        if not hasattr(QtCore, "QState") and hasattr(_state_module, "QState"):
+            QtCore.QState = _state_module.QState
+        if not hasattr(QtCore, "QStateMachine") and hasattr(_state_module, "QStateMachine"):
+            QtCore.QStateMachine = _state_module.QStateMachine
+        if not hasattr(QtCore, "QFinalState") and hasattr(_state_module, "QFinalState"):
+            QtCore.QFinalState = _state_module.QFinalState
 _timers = {}
 _defer_threads = []
 _data = {
@@ -295,3 +318,6 @@ def SlotSentinel(*args):
         return wrapper
 
     return slotdecorator
+
+
+

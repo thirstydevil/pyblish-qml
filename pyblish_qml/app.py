@@ -10,7 +10,7 @@ import threading
 
 # Local libraries
 from . import util, compat, control, settings, ipc
-from .vendor.Qt5 import QtCore, QtGui, QtQuick
+from .vendor.Qt import QtCore, QtGui, QtQuick
 
 MODULE_DIR = os.path.dirname(__file__)
 QML_IMPORT_DIR = os.path.join(MODULE_DIR, "qml")
@@ -304,3 +304,4 @@ def main(demo=False, aschild=False, targets=None):
 
         server.listen()
         server.wait()
+

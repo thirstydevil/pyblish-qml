@@ -8,7 +8,7 @@ import pyblish.logic
 
 # Local libraries
 from . import util, models, version, settings
-from .vendor.Qt5 import QtCore
+from .vendor.Qt import QtCore
 
 qtproperty = util.qtConstantProperty
 
@@ -1245,3 +1245,4 @@ def iterator(plugins, context):
 
         else:
             yield plugin, None
+

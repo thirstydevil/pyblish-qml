@@ -4,7 +4,7 @@ import logging
 
 from . import util, settings
 from .vendor import six
-from .vendor.Qt5 import QtCore
+from .vendor.Qt import QtCore
 
 
 defaults = {
@@ -892,3 +892,4 @@ class ProxyModel(QtCore.QSortFilterProxyModel):
     @QtCore.Slot(result=int)
     def rowCount(self, parent=QtCore.QModelIndex()):
         return super(ProxyModel, self).rowCount(parent)
+

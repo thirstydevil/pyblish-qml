@@ -16,6 +16,7 @@ MODULE_DIR = os.path.dirname(__file__)
 QML_IMPORT_DIR = os.path.join(MODULE_DIR, "qml")
 APP_PATH = os.path.join(MODULE_DIR, "qml", "main.qml")
 ICON_PATH = os.path.join(MODULE_DIR, "icon.ico")
+IS_QT6 = getattr(QtCore, "qVersion", lambda: "0.0.0")().startswith("6.")
 
 
 class Window(QtQuick.QQuickView):
@@ -120,6 +121,11 @@ class Application(QtGui.QGuiApplication):
 
     def on_status_changed(self, status):
         if status == QtQuick.QQuickView.Error:
+            try:
+                for error in self.window.errors():
+                    print("QML Error: {0}".format(error.toString()))
+            except Exception:
+                traceback.print_exc()
             self.quit()
 
     def register_client(self, port):
@@ -168,11 +174,18 @@ class Application(QtGui.QGuiApplication):
         window.requestActivate()
         window.showNormal()
 
-        # Work-around for window appearing behind
-        # other windows upon being shown once hidden.
-        previous_flags = window.flags()
-        window.setFlags(previous_flags | QtCore.Qt.WindowStaysOnTopHint)
-        window.setFlags(previous_flags)
+        # Work-around for window appearing behind other windows.
+        # The legacy flag-toggle trick can make Qt6 QQuickView close/hide.
+        if IS_QT6:
+            if hasattr(window, "raise_"):
+                window.raise_()
+            window.requestActivate()
+        else:
+            previous_flags = window.flags()
+            window.setFlags(previous_flags | QtCore.Qt.WindowStaysOnTopHint)
+            window.setFlags(previous_flags)
+            window.showNormal()
+            window.requestActivate()
 
         # Give statemachine enough time to boot up
         if not any(state in self.controller.states
@@ -210,17 +223,26 @@ class Application(QtGui.QGuiApplication):
 
     def inFocus(self):
         """Set GUI on-top flag"""
-        previous_flags = self.window.flags()
-        self.window.setFlags(previous_flags |
-                             QtCore.Qt.WindowStaysOnTopHint)
-        self.window.setFlags(previous_flags)
+        if IS_QT6:
+            self.window.setFlag(QtCore.Qt.WindowStaysOnTopHint, True)
+            self.window.showNormal()
+            self.window.requestActivate()
+        else:
+            previous_flags = self.window.flags()
+            self.window.setFlags(previous_flags |
+                                 QtCore.Qt.WindowStaysOnTopHint)
+            self.window.setFlags(previous_flags)
 
     def outFocus(self):
         """Remove GUI on-top flag"""
-        previous_flags = self.window.flags()
-        self.window.setFlags(previous_flags ^
-                             QtCore.Qt.WindowStaysOnTopHint)
-        self.window.setFlags(previous_flags)
+        if IS_QT6:
+            self.window.setFlag(QtCore.Qt.WindowStaysOnTopHint, False)
+            self.window.showNormal()
+        else:
+            previous_flags = self.window.flags()
+            self.window.setFlags(previous_flags ^
+                                 QtCore.Qt.WindowStaysOnTopHint)
+            self.window.setFlags(previous_flags)
 
     def publish(self):
         """Fire up the publish sequence"""
@@ -308,6 +330,8 @@ def main(demo=False, aschild=False, targets=None):
         proxy.show(settings.to_dict())
 
         server.listen()
-        server.wait()
+        exit_code = server.wait()
+        print("pyblish-qml child exited with code: {0}".format(exit_code))
+        return exit_code
 
 

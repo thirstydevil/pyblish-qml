@@ -177,7 +177,9 @@ Item {
 
         Connections {
             target: app
-            onStateChanged: restoreComment()
+            function onStateChanged() {
+                restoreComment()
+            }
         }
     }
 

@@ -1,7 +1,9 @@
 
+import os
 import json
 import time
 import collections
+import traceback
 
 # Dependencies
 import pyblish.logic
@@ -313,6 +315,46 @@ class Controller(QtCore.QObject):
     @property
     def states(self):
         return self.data["state"]["all"]
+
+    @property
+    def _debug_reset_enabled(self):
+        return os.getenv("PYBLISH_QML_DEBUG_RESET", "").lower() in (
+            "1", "true", "yes", "on"
+        )
+
+    def _reset_log(self, message):
+        if self._debug_reset_enabled:
+            util.echo("[pyblish-qml][reset] {0}".format(message))
+
+    def _defer_reset_stage(self, stage, target, callback):
+        self._reset_log("starting {0}".format(stage))
+
+        def _on_result(result):
+            if isinstance(result, Exception):
+                util.echo("[pyblish-qml][reset] {0} failed: {1}".format(
+                    stage, result
+                ))
+                self.error.emit("Reset failed at {0}: {1}".format(stage, result))
+                if result.__traceback__ is not None:
+                    traceback.print_exception(
+                        type(result), result, result.__traceback__
+                    )
+                return
+
+            self._reset_log("finished {0}".format(stage))
+
+            try:
+                callback(result)
+            except Exception:
+                util.echo("[pyblish-qml][reset] callback failed at {0}".format(
+                    stage
+                ))
+                traceback.print_exc()
+                self.error.emit(
+                    "Reset failed at {0} callback; see console".format(stage)
+                )
+
+        return util.defer(target, callback=_on_result)
 
     @QtCore.Slot(result=float)
     def time(self):
@@ -799,6 +841,11 @@ class Controller(QtCore.QObject):
         self.data["models"]["result"].reset()
 
         def on_finished(plugins, context):
+            self._reset_log(
+                "finalising with {0} plugins and {1} instances".format(
+                    len(plugins), len(context)
+                )
+            )
             # Compute compatibility
             for plugin in self.data["models"]["item"].plugins:
                 if plugin.instanceEnabled:
@@ -875,17 +922,25 @@ class Controller(QtCore.QObject):
 
         def on_run(plugins):
             """Fetch instances in their current state, right after reset"""
-
-            util.defer(self.host.context,
-                       callback=lambda context: on_finished(plugins, context))
+            self._defer_reset_stage(
+                "host.context(post_collect)",
+                self.host.context,
+                lambda context: on_finished(plugins, context)
+            )
 
         def on_discover(plugins, context):
             collectors = list()
+            self._reset_log("discovered {0} plugins".format(len(plugins)))
 
             # For backwards compatibility check for existance of
             # "plugins_by_targets" method.
             if hasattr(pyblish.api, "plugins_by_targets"):
                 plugins = pyblish.api.plugins_by_targets(plugins, self.targets)
+                self._reset_log(
+                    "filtered to {0} plugins for targets {1}".format(
+                        len(plugins), ", ".join(self.targets)
+                    )
+                )
 
             for plugin in plugins:
                 self.data["models"]["item"].add_plugin(plugin.to_json())
@@ -901,6 +956,9 @@ class Controller(QtCore.QObject):
 
                 collectors.append(plugin)
 
+            self._reset_log(
+                "running {0} collector plugins".format(len(collectors))
+            )
             self.collecting.emit()
 
             self.run(collectors, context,
@@ -908,21 +966,26 @@ class Controller(QtCore.QObject):
                      callback_args=[plugins])
 
         def on_context(context):
+            self._reset_log(
+                "received context with {0} instances".format(len(context))
+            )
             context.data["pyblishQmlVersion"] = version
             context.data["targets"] = ", ".join(self.targets)
 
             self.data["models"]["item"].add_context(context.to_json())
             self.data["models"]["result"].add_context(context.to_json())
 
-            util.defer(
+            self._defer_reset_stage(
+                "host.discover",
                 self.host.discover,
                 callback=lambda plugins: on_discover(plugins, context)
             )
 
-        def on_reset():
-            util.defer(self.host.context, callback=on_context)
+        def on_reset(_=None):
+            self._defer_reset_stage("host.context(initial)", self.host.context,
+                                    on_context)
 
-        util.defer(self.host.reset, callback=on_reset)
+        self._defer_reset_stage("host.reset", self.host.reset, on_reset)
 
     @QtCore.Slot()
     def publish(self):

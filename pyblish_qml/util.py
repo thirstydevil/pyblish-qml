@@ -200,7 +200,14 @@ class _defer(QtCore.QThread):
 
         if callback:
             connection = QtCore.Qt.BlockingQueuedConnection
-            self.done.connect(self.callback, type=connection)
+            self.done.connect(self._dispatch_callback, type=connection)
+
+    @QtCore.Slot(object)
+    def _dispatch_callback(self, result):
+        try:
+            self.callback(result)
+        except Exception:
+            traceback.print_exc()
 
     def run(self, *args, **kwargs):
         try:

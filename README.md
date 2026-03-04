@@ -8,6 +8,14 @@ The Pyblish QML project provides a graphical frontend to [Pyblish](http://pyblis
 
 ![](https://cloud.githubusercontent.com/assets/2152766/16178722/30c3d28c-3648-11e6-8361-84f04113af4b.gif)
 
+### Fork Compatibility Notice
+
+This fork is now maintained for a Qt6 runtime (PySide6 via Qt.py) in the TechArt Python 3.11 environment.
+
+- Qt6/PySide6 is the supported path for this fork.
+- Qt5/PyQt5 backward compatibility is no longer guaranteed.
+- If you require legacy Qt5 behavior, pin to an earlier release before this fork transition.
+
 <br>
 <br>
 <br>

@@ -1,4 +1,4 @@
-from PyQt5 import QtTest
+from pyblish_qml.vendor.Qt import QtTest
 
 # Vendor libraries
 from nose.tools import (

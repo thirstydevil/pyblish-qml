@@ -1,8 +1,7 @@
 import sys
 
 from pyblish_qml import ipc
-
-from PyQt5 import QtCore
+from pyblish_qml.vendor.Qt import QtCore
 
 self = sys.modules[__name__]
 

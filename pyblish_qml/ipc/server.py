@@ -144,6 +144,13 @@ class Server(object):
             key: os.getenv(key)
             for key in ("USERNAME",
                         "SYSTEMROOT",
+                        "USERPROFILE",
+                        "HOMEDRIVE",
+                        "HOMEPATH",
+                        "APPDATA",
+                        "LOCALAPPDATA",
+                        "TEMP",
+                        "TMP",
                         "PYTHONPATH",
                         "PATH",
 
@@ -151,6 +158,11 @@ class Server(object):
                         "DISPLAY")
             if os.getenv(key)
         }
+
+        # Allow explicit pyblish-qml runtime toggles into the child process.
+        for key, value in os.environ.items():
+            if key.startswith("PYBLISH_QML_") and value:
+                environ[key] = value
 
         # Append PyQt5 to existing PYTHONPATH, if available
         environ["PYTHONPATH"] = os.pathsep.join(
@@ -359,25 +371,45 @@ class Server(object):
 
 def find_python():
     """Search for Python automatically"""
-    python = (
-        _state.get("pythonExecutable") or
+    def _is_valid_python(path):
+        if not path:
+            return False
 
-        # Support for multiple executables.
-        next((
-            exe for exe in
-            os.getenv("PYBLISH_QML_PYTHON_EXECUTABLE", "").split(os.pathsep)
-            if os.path.isfile(exe)), None
-        ) or
+        # Users may provide quoted paths or entries with trailing whitespace.
+        path = path.strip().strip('"')
+        if not os.path.isfile(path):
+            return False
 
-        # Search PATH for executables.
-        which("python") or
-        which("python3")
+        # Skip Windows Store app execution aliases, they are unreliable here.
+        lower = path.lower()
+        if "windowsapps" in lower and lower.endswith("python.exe"):
+            return False
+
+        return True
+
+    candidates = []
+
+    # 1. Explicit registration from host integration.
+    candidates.append(_state.get("pythonExecutable"))
+
+    # 2. Explicit environment override(s), supports multiple executables.
+    candidates.extend(
+        exe
+        for exe in os.getenv("PYBLISH_QML_PYTHON_EXECUTABLE", "").split(os.pathsep)
+        if exe
     )
 
-    if not python or not os.path.isfile(python):
-        raise ValueError("Could not locate Python executable.")
+    # 3. Current interpreter - reliable for direct `python -m pyblish_qml` usage.
+    candidates.append(sys.executable)
 
-    return python
+    # 4. Fallback to PATH lookup.
+    candidates.extend([which("python"), which("python3")])
+
+    for candidate in candidates:
+        if _is_valid_python(candidate):
+            return candidate.strip().strip('"')
+
+    raise ValueError("Could not locate a usable Python executable.")
 
 
 def find_qt(python):

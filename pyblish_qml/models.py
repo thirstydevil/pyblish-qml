@@ -871,10 +871,16 @@ class ProxyModel(QtCore.QSortFilterProxyModel):
 
         key = getattr(item, "filter", None)
         if key is not None:
-            regex = self.filterRegExp()
-            if regex.pattern():
-                match = regex.indexIn(key)
-                return False if match == -1 else True
+            key = str(key)
+
+            if hasattr(self, "filterRegularExpression"):
+                regex = self.filterRegularExpression()
+                if regex.pattern() and not regex.match(key).hasMatch():
+                    return False
+            else:
+                regex = self.filterRegExp()
+                if regex.pattern() and regex.indexIn(key) == -1:
+                    return False
 
         for role, values in self.includes.items():
             data = getattr(item, role, None)

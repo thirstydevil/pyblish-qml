@@ -1,7 +1,7 @@
 import sys
 import time
 
-from PyQt5 import QtCore
+from pyblish_qml.vendor.Qt import QtCore
 from pyblish_qml import util
 
 # Vendor libraries

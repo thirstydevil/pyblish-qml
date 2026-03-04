@@ -9,7 +9,7 @@ Loader {
     Connections {
         target: app
 
-        onInitialised: {
+        function onInitialised() {
             var item = app.itemModel.item(1)
             setup(item)
             setSource("../Page.qml", {"item": item})

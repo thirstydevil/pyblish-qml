@@ -107,7 +107,7 @@ Item {
                     }
                 }
 
-                onActionTriggered: {
+                function onActionTriggered(action, index) {
                     if (action.name == "repair")
                         app.repairInstance(index)
                     else if (action.name == "enter")
@@ -142,7 +142,7 @@ Item {
                     }
                 }
 
-                onActionTriggered: {
+                function onActionTriggered(action, index) {
                     if (action.name == "repair")
                         app.repairPlugin(index)
                     else if (action.name == "enter")
@@ -180,7 +180,9 @@ Item {
 
                 Connections {
                     target: Global.currentContextMenu
-                    onToggled: app.runPluginAction(JSON.stringify(data))
+                    function onToggled(data) {
+                        app.runPluginAction(JSON.stringify(data))
+                    }
                 }
             }
         }
@@ -234,21 +236,26 @@ Item {
     Connections {
         target: app
 
-        onError: setMessage(message)
-        onInfo: setMessage(message)
+        function onError(message) {
+            setMessage(message)
+        }
 
-        onFirstRun: {
+        function onInfo(message) {
+            setMessage(message)
+        }
+
+        function onFirstRun() {
             app.commentEnabled ? commentBox.up() : null
             commentBox.text = app.comment("Context")
         }
 
-        onCommented: {
+        function onCommented(name) {
             if (name == "Context") {
                 commentBox.text = app.comment(name)
             }
         }
 
-        onStateChanged: {
+        function onStateChanged(state) {
             if (state == "ready") {
                 overview.state = ""
                 setMessage("Ready")

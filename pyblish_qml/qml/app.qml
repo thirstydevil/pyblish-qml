@@ -48,9 +48,17 @@ StackView {
         width: stack.width
         height: stack.height
 
-        onCommentEntered: setup(app.instanceProxy.item(index), true)
-        onInstanceEntered: setup(app.instanceProxy.item(index), false)
-        onPluginEntered: setup(app.pluginProxy.item(index), false)
+        function onCommentEntered(index) {
+            setup(app.instanceProxy.item(index), true)
+        }
+
+        function onInstanceEntered(index) {
+            setup(app.instanceProxy.item(index), false)
+        }
+
+        function onPluginEntered(index) {
+            setup(app.pluginProxy.item(index), false)
+        }
     }
 
     Component {

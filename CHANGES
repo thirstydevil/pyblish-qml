@@ -1,6 +1,15 @@
 Changelog
 =========
 
+Version 1.15.3
+--------------
+
+- Fork: Declared Qt6/PySide6 (via Qt.py) as the supported runtime target.
+- Compatibility note: Qt5/PyQt5 backward compatibility is no longer guaranteed.
+- Fixed additional Qt6/QML signal handler deprecation warnings in `Ink.qml`,
+  `Overview.qml`, and `app.qml`.
+- Added demo reset smoke coverage and a CI smoke-test step in the wheel workflow.
+
 Version 1.15.2
 --------------
 

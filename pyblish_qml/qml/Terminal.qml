@@ -1,6 +1,4 @@
 import QtQuick 2.3
-import QtQuick.Controls 1.3 as Controls
-import QtQuick.Controls.Styles 1.3 as ControlStyle
 import Pyblish 0.1
 import "Delegates.js" as Delegates
 
@@ -57,19 +55,33 @@ Column {
         Row {
             anchors.fill: parent
 
-            Controls.TextField {
+            Rectangle {
                 height: parent.height
                 width: parent.width - toolBar.width
+                color: "transparent"
 
-                placeholderText: "Filter.."
-
-                style: ControlStyle.TextFieldStyle {
-                    background: Rectangle { color: "transparent" }
-                    textColor: "white"
-                    placeholderTextColor: Qt.darker(textColor, 1.5)
+                TextInput {
+                    id: filterInput
+                    anchors.fill: parent
+                    anchors.leftMargin: 6
+                    anchors.rightMargin: 6
+                    verticalAlignment: TextInput.AlignVCenter
+                    color: "white"
+                    selectByMouse: true
+                    clip: true
+                    onTextChanged: app.resultProxy.setFilterFixedString(text)
                 }
 
-                onTextChanged: app.resultProxy.setFilterFixedString(text)
+                Text {
+                    anchors.fill: parent
+                    anchors.leftMargin: 6
+                    anchors.rightMargin: 6
+                    verticalAlignment: Text.AlignVCenter
+                    text: "Filter.."
+                    color: Qt.darker("white", 1.5)
+                    visible: filterInput.text.length === 0
+                    elide: Text.ElideRight
+                }
             }
 
             Row {

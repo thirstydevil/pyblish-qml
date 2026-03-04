@@ -26,7 +26,12 @@ class Window(QtQuick.QQuickView):
         self.app = parent
 
         self.setTitle(settings.WindowTitle)
-        self.setResizeMode(self.SizeRootObjectToView)
+
+        # Qt6 enum members are not reliably accessible via instance attributes.
+        resize_mode = getattr(QtQuick.QQuickView, "SizeRootObjectToView", None)
+        if resize_mode is None and hasattr(QtQuick.QQuickView, "ResizeMode"):
+            resize_mode = QtQuick.QQuickView.ResizeMode.SizeRootObjectToView
+        self.setResizeMode(resize_mode)
 
         self.resize(*settings.WindowSize)
         self.setMinimumSize(QtCore.QSize(430, 300))
@@ -304,4 +309,5 @@ def main(demo=False, aschild=False, targets=None):
 
         server.listen()
         server.wait()
+
 

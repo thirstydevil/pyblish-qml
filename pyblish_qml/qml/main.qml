@@ -18,8 +18,8 @@ Rectangle {
     color: Qt.rgba(0.3, 0.3, 0.3)
 
     FontLoader {
-    	id: mainFont
-    	name: "Open Sans"
+        id: mainFont
+        source: Qt.resolvedUrl("Pyblish/fonts/opensans/OpenSans-Regular.ttf")
     }
 
     Loader {

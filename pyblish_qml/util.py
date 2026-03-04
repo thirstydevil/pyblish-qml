@@ -26,12 +26,19 @@ if not hasattr(QtCore, "QState") or not hasattr(QtCore, "QStateMachine"):
             _state_module = None
 
     if _state_module is not None:
-        if not hasattr(QtCore, "QState") and hasattr(_state_module, "QState"):
-            QtCore.QState = _state_module.QState
-        if not hasattr(QtCore, "QStateMachine") and hasattr(_state_module, "QStateMachine"):
-            QtCore.QStateMachine = _state_module.QStateMachine
-        if not hasattr(QtCore, "QFinalState") and hasattr(_state_module, "QFinalState"):
-            QtCore.QFinalState = _state_module.QFinalState
+        # Backfill QtStateMachine members expected by legacy Qt5-style code.
+        for _name in (
+            "QState",
+            "QStateMachine",
+            "QFinalState",
+            "QHistoryState",
+            "QAbstractState",
+            "QAbstractTransition",
+            "QEventTransition",
+            "QSignalTransition",
+        ):
+            if not hasattr(QtCore, _name) and hasattr(_state_module, _name):
+                setattr(QtCore, _name, getattr(_state_module, _name))
 _timers = {}
 _defer_threads = []
 _data = {
@@ -318,6 +325,7 @@ def SlotSentinel(*args):
         return wrapper
 
     return slotdecorator
+
 
 
 

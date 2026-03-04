@@ -6,7 +6,7 @@
 */
 
 import QtQuick 2.3
-import QtQuick.Controls 1.3
+import QtQuick.Controls 2.15
 
 import Pyblish 0.1
 import Perspective 0.1 as Perspective
@@ -58,3 +58,4 @@ StackView {
         Perspective.Page {}
     }
 }
+

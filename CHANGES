@@ -1,7 +1,12 @@
 Changelog
 =========
 
-Version 0.7.0
+Version 1.15.1
+--------------
+
+- Fork: Replaced legacy Qt5 shim usage with Qt.py.
+- Added PySide6 compatibility fallback for Qt state machine classes.
+- Removed vendored Qt5.py from distribution.`r`n`r`nVersion 0.7.0
 -------------
 
 - Python 3 support (#191)
@@ -196,3 +201,5 @@ Version 0.1.2
 --------------
 
 - Fixes black-font text sometimes appearing in GUI (#18)
+
+

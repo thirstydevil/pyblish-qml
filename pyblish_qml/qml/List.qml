@@ -9,7 +9,7 @@ ListView {
     signal itemToggled(int index)
     signal itemDoubleClicked(int index)
     signal itemRightClicked(int index)
-    signal actionTriggered(Action action, int index)
+    signal actionTriggered(var action, int index)
 
     width: 200
     height: 300

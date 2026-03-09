@@ -33,13 +33,10 @@ StackView {
         app.itemProxy.clear_inclusion()
         app.itemProxy.add_inclusion("itemType", otherItem)
 
-        stack.push({
-            item: perspective,
-            properties: {
-                "item": item,
-                "overview": overview,
-                "commenting": commenting,
-            }
+        stack.push(perspective, {
+            "item": item,
+            "overview": overview,
+            "commenting": commenting,
         })
     }
 
@@ -48,15 +45,15 @@ StackView {
         width: stack.width
         height: stack.height
 
-        function onCommentEntered(index) {
+        onCommentEntered: function(index) {
             setup(app.instanceProxy.item(index), true)
         }
 
-        function onInstanceEntered(index) {
+        onInstanceEntered: function(index) {
             setup(app.instanceProxy.item(index), false)
         }
 
-        function onPluginEntered(index) {
+        onPluginEntered: function(index) {
             setup(app.pluginProxy.item(index), false)
         }
     }
@@ -66,4 +63,3 @@ StackView {
         Perspective.Page {}
     }
 }
-

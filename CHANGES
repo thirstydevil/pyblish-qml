@@ -1,6 +1,12 @@
 Changelog
 =========
 
+Version 1.16.4
+--------------
+
+- Fix Qt/QML button and details-panel interactions under the current runtime.
+- Fix `StackView` navigation for the details view.
+
 Version 1.16.3
 --------------
 
@@ -226,7 +232,6 @@ Version 0.1.2
 --------------
 
 - Fixes black-font text sometimes appearing in GUI (#18)
-
 
 
 

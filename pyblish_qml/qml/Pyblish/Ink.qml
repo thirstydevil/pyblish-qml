@@ -55,12 +55,12 @@ Item {
 
         hoverEnabled: enabled
 
-        function onPressed(mouse) {
+        onPressed: function(mouse) {
             createTapCircle(mouse.x, mouse.y)
         }
         onCanceled: currentCircle.removeCircle();
 
-        function onReleased(mouse) {
+        onReleased: function(mouse) {
             currentCircle.removeCircle();
 
             if (doubleClickTimer.running) {

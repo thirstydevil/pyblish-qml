@@ -107,7 +107,7 @@ Item {
                     }
                 }
 
-                function onActionTriggered(action, index) {
+                onActionTriggered: function(action, index) {
                     if (action.name == "repair")
                         app.repairInstance(index)
                     else if (action.name == "enter")
@@ -142,7 +142,7 @@ Item {
                     }
                 }
 
-                function onActionTriggered(action, index) {
+                onActionTriggered: function(action, index) {
                     if (action.name == "repair")
                         app.repairPlugin(index)
                     else if (action.name == "enter")

@@ -17,6 +17,22 @@ QML_IMPORT_DIR = os.path.join(MODULE_DIR, "qml")
 APP_PATH = os.path.join(MODULE_DIR, "qml", "main.qml")
 ICON_PATH = os.path.join(MODULE_DIR, "icon.ico")
 IS_QT6 = getattr(QtCore, "qVersion", lambda: "0.0.0")().startswith("6.")
+FORCE_ON_TOP_HOSTS = {"Blender"}
+
+
+def _should_force_on_top(client_settings=None):
+    env_value = os.environ.get("PYBLISH_QML_FORCE_ON_TOP", "").strip().lower()
+    if env_value in {"1", "true", "yes", "on"}:
+        return True
+
+    label = None
+    if client_settings:
+        label = client_settings.get("ContextLabel")
+
+    if not label:
+        label = settings.ContextLabel
+
+    return label in FORCE_ON_TOP_HOSTS
 
 
 class Window(QtQuick.QQuickView):
@@ -174,9 +190,18 @@ class Application(QtGui.QGuiApplication):
         window.requestActivate()
         window.showNormal()
 
+        force_on_top = _should_force_on_top(client_settings)
+
         # Work-around for window appearing behind other windows.
-        # The legacy flag-toggle trick can make Qt6 QQuickView close/hide.
-        if IS_QT6:
+        # Blender runs without a Qt parent window, so keep the publisher on top
+        # instead of trying to attach it like a child dialog.
+        if force_on_top:
+            window.setFlag(QtCore.Qt.WindowStaysOnTopHint, True)
+            window.showNormal()
+            if hasattr(window, "raise_"):
+                window.raise_()
+            window.requestActivate()
+        elif IS_QT6:
             if hasattr(window, "raise_"):
                 window.raise_()
             window.requestActivate()

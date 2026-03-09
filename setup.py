@@ -60,7 +60,7 @@ classifiers = [
 setup(
     name="pyblish-qml",
     version=version,
-    description="Frontend for Pyblish written in PyQt5/QML",
+    description="Frontend for Pyblish written for Qt6/PySide6 QML",
     long_description=readme,
     author="Abstract Factory and Contributors",
     author_email="marcus@abstractfactory.com",

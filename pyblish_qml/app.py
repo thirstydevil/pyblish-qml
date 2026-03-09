@@ -60,6 +60,14 @@ class Window(QtQuick.QQuickView):
             shift_pressed = QtCore.Qt.ShiftModifier & modifiers
             states = self.app.controller.states
 
+            # Blender runs pyblish-qml as a separate top-level Qt process.
+            # Do not synchronously round-trip close events through the host,
+            # because that can deadlock the Blender timer bridge on shutdown.
+            if _should_force_on_top():
+                event.accept()
+                QtCore.QTimer.singleShot(0, self.app.quit)
+                return True
+
             if shift_pressed:
                 print("Force quitted..")
                 self.app.controller.host.emit("pyblishQmlCloseForced")

@@ -1,10 +1,11 @@
 Changelog
 =========
 
-Version 1.16.2
+Version 1.16.3
 --------------
 
-- Release version bump to 1.16.2.
+- Release version bump to 1.16.3.
+- Fix Blender hang on closing the Pyblish QML window.
 
 Version 1.15.3
 --------------

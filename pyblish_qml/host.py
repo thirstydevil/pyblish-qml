@@ -225,7 +225,7 @@ def register_python_executable(path):
     """Expose Python executable to server
 
     The Python executable must be compatible with the
-    version of PyQt5 installed or provided on the system.
+    version of the configured Qt binding installed or provided on the system.
 
     """
 
@@ -238,17 +238,23 @@ def registered_python_executable():
     return _state.get("pythonExecutable")
 
 
-def register_pyqt5(path):
-    """Expose PyQt5 to Python
+def register_qt_path(path):
+    """Expose a Qt binding package path to Python.
 
-    The exposed PyQt5 must be compatible with the exposed Python.
+    The exposed Qt binding must be compatible with the exposed Python.
 
     Arguments:
-        path (str): Absolute path to directory containing PyQt5
+        path (str): Absolute path to the directory containing the Qt binding package
 
     """
 
-    _state["pyqt5"] = path
+    _state["qtBindingPath"] = path
+
+
+def register_pyside6(path):
+    """Helper for the supported Qt6 runtime."""
+
+    register_qt_path(path)
 
 
 def install_host(use_threaded_wrapper):

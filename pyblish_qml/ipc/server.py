@@ -107,7 +107,7 @@ class Server(object):
     Arguments:
         service (service.Service): Dispatch requests to this service
         python (str, optional): Absolute path to Python executable
-        pyqt5 (str, optional): Absolute path to PyQt5
+        qt_path (str, optional): Absolute path to a Qt binding package path
         targets (list, optional): Publishing targets, e.g. `ftrack`
         modal (bool, optional): Block interactions to parent
 
@@ -116,6 +116,7 @@ class Server(object):
     def __init__(self,
                  service,
                  python=None,
+                 qt_path=None,
                  pyqt5=None,
                  targets=None,
                  modal=False,
@@ -135,8 +136,8 @@ class Server(object):
         python = python or find_python()
         print("Using Python @ '%s'" % python)
 
-        pyqt5 = pyqt5 or find_qt(python)
-        print("Using PyQt5 @ '%s'" % pyqt5)
+        qt_path = qt_path or pyqt5 or find_qt(python)
+        print("Using Qt binding path @ '%s'" % qt_path)
 
         # Maintain the absolute minimum of environment variables,
         # to avoid issues on invalid types.
@@ -164,9 +165,9 @@ class Server(object):
             if key.startswith("PYBLISH_QML_") and value:
                 environ[key] = value
 
-        # Append PyQt5 to existing PYTHONPATH, if available
+        # Append the configured Qt binding path to PYTHONPATH, if available
         environ["PYTHONPATH"] = os.pathsep.join(
-            path for path in [os.getenv("PYTHONPATH"), pyqt5]
+            path for path in [os.getenv("PYTHONPATH"), qt_path]
             if path is not None
         )
 
@@ -413,14 +414,14 @@ def find_python():
 
 
 def find_qt(python):
-    """Search for PyQt5 automatically"""
-    pyqt5 = (
-        _state.get("pyqt5") or
-        os.getenv("PYBLISH_QML_PYSIDE2") or
-        os.getenv("PYBLISH_QML_PYQT5")
+    """Search for an explicitly registered Qt binding path."""
+    qt_path = (
+        _state.get("qtBindingPath") or
+        os.getenv("PYBLISH_QML_QT_PATH") or
+        os.getenv("PYBLISH_QML_PYSIDE6")
     )
 
-    return pyqt5
+    return qt_path
 
 
 def which(program):

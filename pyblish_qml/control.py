@@ -52,6 +52,7 @@ class Controller(QtCore.QObject):
     commenting = QtCore.Signal(str, str, arguments=["comment", "name"])
 
     state_changed = QtCore.Signal(str, arguments=["state"])
+    instanceSelectionChanged = QtCore.Signal()
 
     # Statically expose these members to the QML run-time.
     itemModel = qtproperty(lambda self: self.data["models"]["item"])
@@ -308,6 +309,22 @@ class Controller(QtCore.QObject):
     def state(self):
         return self.data["state"]["current"]
 
+    @QtCore.Property(int, notify=instanceSelectionChanged)
+    def enabledInstanceCount(self):
+        return sum(
+            1
+            for item in self.data["models"]["item"].instances
+            if item.optional and item.isToggled
+        )
+
+    @QtCore.Property(int, notify=instanceSelectionChanged)
+    def optionalInstanceCount(self):
+        return sum(
+            1
+            for item in self.data["models"]["item"].instances
+            if item.optional
+        )
+
     @QtCore.Property(bool)
     def commentEnabled(self):
         return "comment" in self.host.cached_context.data
@@ -539,24 +556,69 @@ class Controller(QtCore.QObject):
 
         util.defer(run, callback=on_finished)
 
+    def _instance_from_proxy_index(self, index):
+        model = self.data["models"]["item"]
+        proxy = self.data["proxies"]["instance"]
+        proxy_index = proxy.index(index, 0, QtCore.QModelIndex())
+        source_index = proxy.mapToSource(proxy_index).row()
+
+        if source_index < 0 or source_index >= len(model.items):
+            return None, None
+
+        return source_index, model.items[source_index]
+
+    def _set_optional_instances(self, predicate):
+        if "ready" not in self.states:
+            self.error.emit("Not ready")
+            return False
+
+        model = self.data["models"]["item"]
+        changed = False
+
+        for item in model.instances:
+            if not item.optional:
+                continue
+
+            enabled = bool(predicate(item))
+            if item.isToggled == enabled:
+                continue
+
+            self.__toggle_item(model, model.items.index(item))
+            changed = True
+
+        if changed:
+            self.instanceSelectionChanged.emit()
+
+        return changed
+
+    @QtCore.Slot(bool)
+    def setAllInstancesToggled(self, enabled):
+        """Set every optional publish instance to the requested state."""
+        self._set_optional_instances(lambda _item: enabled)
+
+    @QtCore.Slot(int)
+    def soloInstance(self, index):
+        """Enable one optional instance and disable every other instance."""
+        _source_index, selected = self._instance_from_proxy_index(index)
+        if selected is None or not selected.optional:
+            return
+
+        self._set_optional_instances(lambda item: item is selected)
+
     @QtCore.Slot(int)
     def toggleInstance(self, index):
-        models = self.data["models"]
-        proxies = self.data["proxies"]
-
-        qindex = proxies["instance"].index(index, 0, QtCore.QModelIndex())
-        source_qindex = self.data["proxies"]["instance"].mapToSource(qindex)
-        source_index = source_qindex.row()
-        item = models["item"].items[source_index]
+        source_index, item = self._instance_from_proxy_index(index)
+        if item is None:
+            return
 
         if item.optional:
-            self.__toggle_item(models["item"], source_index)
-        else:
-            self.error.emit("Cannot toggle")
+            self.__toggle_item(self.data["models"]["item"], source_index)
+            self.instanceSelectionChanged.emit()
 
     @QtCore.Slot(bool, str)
     def toggleSection(self, checkState, sectionLabel):
         model = self.data["models"]["item"]
+        instance_changed = False
 
         # Get all items' current toggle state
         states = set()
@@ -578,10 +640,14 @@ class Controller(QtCore.QObject):
             if item.itemType == "instance" and sectionLabel == item.category:
                 if item.isToggled != checkState and item.optional:
                     self.__toggle_item(model, model.items.index(item))
+                    instance_changed = True
 
             if item.itemType == "plugin" and sectionLabel == item.verb:
                 if item.isToggled != checkState and item.optional:
                     self.__toggle_item(model, model.items.index(item))
+
+        if instance_changed:
+            self.instanceSelectionChanged.emit()
 
     @QtCore.Slot(bool, str)
     def hideSection(self, hideState, sectionLabel):
@@ -874,6 +940,7 @@ class Controller(QtCore.QObject):
 
             self.initialised.emit()
 
+            self.instanceSelectionChanged.emit()
             self.data["models"]["item"].update_compatibility()
 
             # Remember comment across resets

@@ -10,6 +10,7 @@ MouseArea {
 
     property bool active: true
     property bool checked: false
+    enabled: active
 
     property var statuses: {
         "default": "white",

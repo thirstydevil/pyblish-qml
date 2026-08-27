@@ -19,6 +19,59 @@ ICON_PATH = os.path.join(MODULE_DIR, "icon.ico")
 IS_QT6 = getattr(QtCore, "qVersion", lambda: "0.0.0")().startswith("6.")
 FORCE_ON_TOP_HOSTS = {"Blender"}
 
+WINDOW_SETTINGS_ORGANIZATION = "Pyblish"
+WINDOW_SETTINGS_APPLICATION = "PyblishQML"
+WINDOW_GEOMETRY_GROUP = "windowGeometry/v1"
+
+
+def _visibility_constant(name):
+    value = getattr(QtGui.QWindow, name, None)
+    if value is None and hasattr(QtGui.QWindow, "Visibility"):
+        value = getattr(QtGui.QWindow.Visibility, name, None)
+    return value
+
+
+def _intersection_area(first, second):
+    intersection = first.intersected(second)
+    return max(0, intersection.width()) * max(0, intersection.height())
+
+
+def _fit_window_rect(rect, available_rects, minimum_size=None):
+    """Return a usable window rectangle for the connected screens."""
+    rect = QtCore.QRect(rect)
+    available_rects = [QtCore.QRect(item) for item in available_rects]
+    if not available_rects:
+        return rect
+
+    minimum_size = minimum_size or QtCore.QSize(430, 300)
+    areas = [_intersection_area(rect, item) for item in available_rects]
+    best_area = max(areas)
+    available = (
+        available_rects[areas.index(best_area)]
+        if best_area
+        else available_rects[0]
+    )
+
+    width = min(max(rect.width(), minimum_size.width()), available.width())
+    height = min(max(rect.height(), minimum_size.height()), available.height())
+    rect.setSize(QtCore.QSize(width, height))
+
+    if not best_area:
+        rect.moveCenter(available.center())
+        return rect
+
+    max_x = available.right() - rect.width() + 1
+    max_y = available.bottom() - rect.height() + 1
+    rect.moveLeft(min(max(rect.left(), available.left()), max_x))
+    rect.moveTop(min(max(rect.top(), available.top()), max_y))
+    return rect
+
+
+def _as_bool(value):
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
 
 def _should_force_on_top(client_settings=None):
     env_value = os.environ.get("PYBLISH_QML_FORCE_ON_TOP", "").strip().lower()
@@ -52,6 +105,23 @@ class Window(QtQuick.QQuickView):
 
         self.resize(*settings.WindowSize)
         self.setMinimumSize(QtCore.QSize(430, 300))
+
+        self._normal_geometry = self._current_rect()
+        self.xChanged.connect(self._remember_normal_geometry)
+        self.yChanged.connect(self._remember_normal_geometry)
+        self.widthChanged.connect(self._remember_normal_geometry)
+        self.heightChanged.connect(self._remember_normal_geometry)
+
+    def _current_rect(self):
+        return QtCore.QRect(self.framePosition(), self.size())
+
+    def _remember_normal_geometry(self, *_args):
+        blocked = {
+            _visibility_constant(name)
+            for name in ("Maximized", "Minimized", "FullScreen")
+        }
+        if self.visibility() not in blocked:
+            self._normal_geometry = self._current_rect()
 
     def event(self, event):
         """Allow GUI to be closed upon holding Shift"""
@@ -129,6 +199,9 @@ class Application(QtGui.QGuiApplication):
         self.clients = dict()
         self.current_client = None
 
+        self._geometry_restored = False
+        self._restore_maximized = False
+
         self.shown.connect(self.show)
         self.hidden.connect(self.hide)
         self.quitted.connect(self.quit)
@@ -141,6 +214,8 @@ class Application(QtGui.QGuiApplication):
         self.inFocused.connect(self.inFocus)
         self.outFocused.connect(self.outFocus)
 
+        self.aboutToQuit.connect(self._save_window_geometry)
+
         window.setSource(QtCore.QUrl.fromLocalFile(source))
 
     def on_status_changed(self, status):
@@ -151,6 +226,63 @@ class Application(QtGui.QGuiApplication):
             except Exception:
                 traceback.print_exc()
             self.quit()
+
+    def _window_settings(self):
+        return QtCore.QSettings(
+            WINDOW_SETTINGS_ORGANIZATION,
+            WINDOW_SETTINGS_APPLICATION,
+        )
+
+    def _save_window_geometry(self):
+        window = self.window
+        maximized = window.visibility() == _visibility_constant("Maximized")
+        self._restore_maximized = maximized
+        rect = window._normal_geometry
+
+        store = self._window_settings()
+        store.beginGroup(WINDOW_GEOMETRY_GROUP)
+        store.setValue("valid", True)
+        store.setValue("x", rect.x())
+        store.setValue("y", rect.y())
+        store.setValue("width", rect.width())
+        store.setValue("height", rect.height())
+        store.setValue("maximized", maximized)
+        store.endGroup()
+        store.sync()
+
+    def _restore_window_geometry(self):
+        store = self._window_settings()
+        store.beginGroup(WINDOW_GEOMETRY_GROUP)
+        valid = _as_bool(store.value("valid", False))
+        if not valid:
+            store.endGroup()
+            return False
+
+        try:
+            rect = QtCore.QRect(
+                int(store.value("x")),
+                int(store.value("y")),
+                int(store.value("width")),
+                int(store.value("height")),
+            )
+        except (TypeError, ValueError):
+            store.endGroup()
+            return False
+
+        maximized = _as_bool(store.value("maximized", False))
+        store.endGroup()
+
+        available_rects = [screen.availableGeometry() for screen in self.screens()]
+        rect = _fit_window_rect(
+            rect,
+            available_rects,
+            self.window.minimumSize(),
+        )
+        self.window.resize(rect.size())
+        self.window.setFramePosition(rect.topLeft())
+        self.window._normal_geometry = QtCore.QRect(rect)
+        self._restore_maximized = maximized
+        return maximized
 
     def register_client(self, port):
         self.current_client = port
@@ -188,6 +320,10 @@ class Application(QtGui.QGuiApplication):
                 )
             )
 
+        if not self._geometry_restored:
+            self._restore_window_geometry()
+            self._geometry_restored = True
+
         message = list()
         message.append("Settings: ")
         for key, value in settings.to_dict().items():
@@ -220,6 +356,9 @@ class Application(QtGui.QGuiApplication):
             window.showNormal()
             window.requestActivate()
 
+        if self._restore_maximized:
+            window.showMaximized()
+
         # Give statemachine enough time to boot up
         if not any(state in self.controller.states
                    for state in ["ready", "finished"]):
@@ -248,6 +387,7 @@ class Application(QtGui.QGuiApplication):
         via a call to `show()`
 
         """
+        self._save_window_geometry()
         self.window.hide()
 
     def rise(self):
@@ -356,15 +496,32 @@ def main(demo=False, aschild=False, targets=None):
 
     else:
         print("Starting pyblish-qml server..")
-        service = ipc.service.MockService() if demo else ipc.service.Service()
-        server = ipc.server.Server(service, targets=targets)
+        demo_host = None
+        if demo:
+            # The normal host entry point installs these callbacks before
+            # starting its service. The standalone demo must do the same so
+            # toggle state is written back to the mock context and survives
+            # the context refresh performed after each processed plug-in.
+            from . import host as demo_host
+            demo_host.install_callbacks()
 
-        proxy = ipc.server.Proxy(server)
-        proxy.show(settings.to_dict())
+        try:
+            service = (
+                ipc.service.MockService()
+                if demo
+                else ipc.service.Service()
+            )
+            server = ipc.server.Server(service, targets=targets)
 
-        server.listen()
-        exit_code = server.wait()
-        print("pyblish-qml child exited with code: {0}".format(exit_code))
-        return exit_code
+            proxy = ipc.server.Proxy(server)
+            proxy.show(settings.to_dict())
+
+            server.listen()
+            exit_code = server.wait()
+            print("pyblish-qml child exited with code: {0}".format(exit_code))
+            return exit_code
+        finally:
+            if demo_host is not None:
+                demo_host.uninstall_callbacks()
 
 

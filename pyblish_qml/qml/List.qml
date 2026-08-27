@@ -44,6 +44,15 @@ ListView {
 
         actions: [
             Action {
+                name: "solo"
+                iconName: "bullseye"
+                iconSize: 12
+                tooltip: "Enable only this instance"
+                enabled: object.itemType == "instance" && object.optional
+                onTriggered: actionTriggered(this, index)
+            },
+
+            Action {
                 name: "repair"
                 iconName: "wrench"
                 enabled: object.hasError && object.hasRepair ? true : false

@@ -108,7 +108,9 @@ Item {
                 }
 
                 onActionTriggered: function(action, index) {
-                    if (action.name == "repair")
+                    if (action.name == "solo")
+                        app.soloInstance(index)
+                    else if (action.name == "repair")
                         app.repairInstance(index)
                     else if (action.name == "enter")
                         overview.instanceEntered(index)
@@ -221,6 +223,10 @@ Item {
         visible: overview.state != "initialising"
 
         mode:  overview.state == "publishing" ? 1 : overview.state == "finished" ? 2 : 0
+        instanceSelectionEnabled: overview.state == "" &&
+                                  app.optionalInstanceCount > 0
+        instanceSelectionSummary: app.enabledInstanceCount + " of " +
+                                  app.optionalInstanceCount + " enabled"
 
         width: parent.width
         anchors.bottom: parent.bottom
@@ -231,6 +237,8 @@ Item {
         onStop: app.stop()
         onSave: app.save()
         onComment: commentBox.height > 75 ? commentBox.down() : commentBox.up()
+        onEnableAllInstances: app.setAllInstancesToggled(true)
+        onDisableAllInstances: app.setAllInstancesToggled(false)
     }
 
     Connections {

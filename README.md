@@ -375,6 +375,23 @@ The GUI will read the current label after having processed *all* collectors. Any
 <br>
 <br>
 
+### Extension points
+
+Pyblish QML knows nothing about the pipeline that runs it. A pipeline registers providers, from the host
+process, for the places it wants to take part in (`pyblish_qml.hooks`):
+
+- `scene_guard`: ties a publish session to one scene, so results from an earlier scene cannot be acted on.
+- `publish_settings`: per-instance settings shown for instances with `hasPublishSettings` set.
+
+```python
+from pyblish_qml import hooks
+
+hooks.register(hooks.SCENE_GUARD, MyGuard())
+```
+
+Nothing registered means nothing happens. The protocol of each provider is in the docstring of
+`pyblish_qml/hooks.py`.
+
 ### Differences to [Pyblish Lite](https://github.com/mottosso/pyblish-lite)
 
 Pyblish QML fills the same gap as Pyblish Lite, with a few notable differences.

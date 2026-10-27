@@ -11,6 +11,7 @@ import pyblish.lib
 import pyblish.plugin
 
 from . import mocking, formatting
+from .. import hooks
 
 _log = logging.getLogger("pyblish-qml")
 
@@ -52,15 +53,15 @@ class Service(object):
         }
 
     def _assert_current_scene(self):
-        if 'maya' in pyblish.api.registered_hosts():
-            from jam.core.publishing.scene import assert_current
-            assert_current(self._context)
+        guard = hooks.get(hooks.SCENE_GUARD)
+        if guard is not None:
+            guard.assert_current(self._context)
 
     def reset(self):
         self._context = pyblish.api.Context()
-        if 'maya' in pyblish.api.registered_hosts():
-            from jam.core.publishing.scene import bind_context
-            bind_context(self._context)
+        guard = hooks.get(hooks.SCENE_GUARD)
+        if guard is not None:
+            guard.bind(self._context)
         self._plugins = pyblish.api.discover()
         self._provider = pyblish.plugin.Provider()
 
@@ -82,18 +83,19 @@ class Service(object):
 
     def publish_settings(self, instance_id, entries=None, enabled_ids=None):
         try:
+            provider = hooks.get(hooks.PUBLISH_SETTINGS)
+            if provider is None:
+                raise RuntimeError("No publish settings provider is registered")
             self._assert_current_scene()
-            from jam.dcc.jam_maya import publish_settings
             instance = self.__instances[instance_id]
-            tag = instance.data["tag"]
             if entries is not None:
-                others = [item.data["tag"] for item in self._context
+                others = [item for item in self._context
                           if item.id in (enabled_ids or []) and item.id != instance_id
                           and item.data.get("hasPublishSettings")]
-                count = publish_settings.save(tag, entries, others)
+                count = provider.save(instance, entries, others)
                 return {"ok": True, "count": count}
             return {"ok": True, "name": instance.name,
-                    "sections": publish_settings.sections(tag)}
+                    "sections": provider.sections(instance)}
         except Exception as error:
             return {"ok": False, "error": str(error)}
 

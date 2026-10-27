@@ -20,3 +20,9 @@ The runtime version remains 1.16.5 to preserve exact deployed source parity.
 This synchronization commit does not create a new release tag or publish a
 wheel; the historical v1.16.5 tag still identifies the earlier release.
 Use the Git commit to identify this source snapshot until a release is prepared.
+
+## Update: release 1.16.6
+
+Version 1.16.6 is the first release after the reconciliation above. It also renames the host modules and the
+validation-scene context key from `jam` to `gluon`, so this release no longer matches a host that still
+provides the `jam` modules. The 1.16.5 wording above describes the earlier snapshot.

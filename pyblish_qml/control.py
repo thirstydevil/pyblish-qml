@@ -523,7 +523,7 @@ class Controller(QtCore.QObject):
         self.reportActionsChanged.emit()
 
     def _set_report_scene(self, context):
-        self._scene_generation = context.data.get("_jam_validation_scene", {}).get("generation")
+        self._scene_generation = context.data.get("_gluon_validation_scene", {}).get("generation")
         self._scene_stale = bool(self._scene_event_generation and
                                  self._scene_generation != self._scene_event_generation)
         self.reportActionsChanged.emit()

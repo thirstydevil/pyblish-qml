@@ -165,7 +165,7 @@ def format_data(data):
         "optional",
 
         # Immutable validation-scene provenance, also retained in saved reports.
-        "_jam_validation_scene",
+        "_gluon_validation_scene",
 
         # Provided by service.py
         "host",

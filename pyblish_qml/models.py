@@ -670,7 +670,7 @@ class ResultModel(AbstractModel):
         data = context["data"]
         self.support_report()["context"] = json.loads(json.dumps({key: data[key] for key in (
             "host", "user", "pythonVersion", "pyblishVersion", "pyblishQmlVersion",
-            "targets", "_jam_validation_scene") if key in data}))
+            "targets", "_gluon_validation_scene") if key in data}))
         item = defaults["result"].copy()
         item.update(context["data"])
         item.update({

@@ -1,6 +1,16 @@
 Changelog
 =========
 
+Version 1.16.6
+--------------
+
+- Release of the source synchronized on 2026-10-27 (see `DEPLOYED_SOURCE.md`): structured validation
+  feedback with legacy error fallback, report export, scene invalidation, instance browsing and
+  host-confirmed publish selection.
+- Rename the host modules the Maya scene guard and publish settings import from `jam` to `gluon`
+  (`gluon.core.publishing.scene`, `gluon.dcc.gluon_maya.publish_settings`), and the context key
+  `_jam_validation_scene` to `_gluon_validation_scene`. Needs a host that provides the Gluon names.
+
 Version 1.16.4
 --------------
 

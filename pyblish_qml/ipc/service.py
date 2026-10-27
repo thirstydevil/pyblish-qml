@@ -53,13 +53,13 @@ class Service(object):
 
     def _assert_current_scene(self):
         if 'maya' in pyblish.api.registered_hosts():
-            from jam.core.publishing.scene import assert_current
+            from gluon.core.publishing.scene import assert_current
             assert_current(self._context)
 
     def reset(self):
         self._context = pyblish.api.Context()
         if 'maya' in pyblish.api.registered_hosts():
-            from jam.core.publishing.scene import bind_context
+            from gluon.core.publishing.scene import bind_context
             bind_context(self._context)
         self._plugins = pyblish.api.discover()
         self._provider = pyblish.plugin.Provider()
@@ -83,7 +83,7 @@ class Service(object):
     def publish_settings(self, instance_id, entries=None, enabled_ids=None):
         try:
             self._assert_current_scene()
-            from jam.dcc.jam_maya import publish_settings
+            from gluon.dcc.gluon_maya import publish_settings
             instance = self.__instances[instance_id]
             tag = instance.data["tag"]
             if entries is not None:

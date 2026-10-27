@@ -6,6 +6,8 @@ import Pyblish.ListItems 0.1 as ListItem
 ListView {
     id: list
 
+    property bool selectionEnabled: false
+    signal itemPicked(int index, bool extend, bool rangeSelect)
     signal itemToggled(int index)
     signal itemDoubleClicked(int index)
     signal itemRightClicked(int index)
@@ -19,8 +21,32 @@ ListView {
     boundsBehavior: Flickable.DragOverBounds
     pixelAligned: true
 
+    Keys.onPressed: function(event) {
+        if (!selectionEnabled) return
+        if (event.key === Qt.Key_Space) {
+            itemToggled(currentIndex)
+            event.accepted = true
+        } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+            currentIndex = Math.max(0, Math.min(count - 1,
+                currentIndex + (event.key === Qt.Key_Up ? -1 : 1)))
+            positionViewAtIndex(currentIndex, ListView.Contain)
+            itemPicked(currentIndex, Boolean(event.modifiers & Qt.ControlModifier),
+                       Boolean(event.modifiers & Qt.ShiftModifier))
+            event.accepted = true
+        }
+    }
+
     delegate: ListItem.StandardActions {
-        text: object.label || object.name
+        objectName: "publishRow_" + object.name
+        selectable: list.selectionEnabled && object.optional
+        selected: list.selectionEnabled && object.isPicked
+        onPicked: function(mouse) {
+            list.currentIndex = index
+            list.forceActiveFocus()
+            list.itemPicked(index, Boolean(mouse.modifiers & Qt.ControlModifier),
+                            Boolean(mouse.modifiers & Qt.ShiftModifier))
+        }
+        text: (object.label || object.name) + (object.publishSettingsSummary ? " · " + object.publishSettingsSummary : "")
         active: object.optional
         checked: object.isToggled
         hidden: object.isHidden
@@ -40,14 +66,21 @@ ListView {
         }
 
         onToggled: itemToggled(index)
-        onPressed: itemRightClicked(index)
+        onRightClicked: itemRightClicked(index)
 
         actions: [
+            Action {
+                name: "options"
+                iconName: "cog"
+                tooltip: "Configure publish options for this tag"
+                enabled: object.hasPublishSettings
+                onTriggered: actionTriggered(this, index)
+            },
             Action {
                 name: "solo"
                 iconName: "bullseye"
                 iconSize: 12
-                tooltip: "Enable only this instance"
+                tooltip: "Check only this export for this run"
                 enabled: object.itemType == "instance" && object.optional
                 onTriggered: actionTriggered(this, index)
             },

@@ -41,6 +41,7 @@ def format_result(result):
     if result["error"] is not None:
         error = format_error(result["error"])
 
+    original = result
     result = {
         "success": result["success"],
         "plugin": format_plugin(result["plugin"]),
@@ -49,6 +50,12 @@ def format_result(result):
         "records": format_records(result["records"]),
         "duration": result["duration"]
     }
+
+    result["action"] = original.get("action")
+
+    for key in ("report", "error_info"):
+        if key in original:
+            result[key] = original[key]
 
     if os.getenv("PYBLISH_SAFE"):
         schema.validate(result, "result")
@@ -66,6 +73,13 @@ def format_records(records):
 
 def format_record(record):
     """Serialise LogRecord instance"""
+
+    # Render while Python objects are still available in the host. Formatting
+    # arguments and traceback objects cannot cross the JSON IPC boundary.
+    message = record.getMessage()
+    exception_text = record.exc_text
+    if record.exc_info and not exception_text:
+        exception_text = logging.Formatter().formatException(record.exc_info)
 
     record = dict(
         (key, getattr(record, key, None))
@@ -91,8 +105,11 @@ def format_record(record):
             "msecs")
     )
 
-    # Humanise output and conform to Exceptions
-    record["message"] = str(record.pop("msg"))
+    record.pop("msg")
+    record["message"] = message
+    record["args"] = ()
+    record["exc_info"] = None
+    record["exc_text"] = exception_text
 
     if os.getenv("PYBLISH_SAFE"):
         schema.validate(record, "record")
@@ -140,8 +157,15 @@ def format_data(data):
         "publish",
         "comment",
 
+        # Tag settings affordance and compact output count shown by the UI.
+        "hasPublishSettings",
+        "publishSettingsSummary",
+
         # Allows an instance to be non-optional (ie, mandatory)
         "optional",
+
+        # Immutable validation-scene provenance, also retained in saved reports.
+        "_jam_validation_scene",
 
         # Provided by service.py
         "host",

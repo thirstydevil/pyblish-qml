@@ -18,6 +18,7 @@ import os
 import sys
 import json
 import threading
+import tempfile
 import subprocess
 import time
 
@@ -73,6 +74,9 @@ class Proxy(object):
 
     def publish(self):
         self._dispatch("publish")
+
+    def scene_changed(self, generation):
+        self._dispatch("sceneChanged", args=[generation])
 
     def validate(self):
         self._dispatch("validate")
@@ -165,6 +169,12 @@ class Server(object):
             if key.startswith("PYBLISH_QML_") and value:
                 environ[key] = value
 
+        # A separate signal is needed while the request listener waits for Maya.
+        # Unique per publisher window, so an old Stop cannot cancel a new run.
+        cancel_file = os.path.join(tempfile.mkdtemp(prefix="pyblish_cancel_"), "stop")
+        _state["cancelFile"] = cancel_file
+        environ["PYBLISH_QML_CANCEL_FILE"] = cancel_file
+
         # Append the configured Qt binding path to PYTHONPATH, if available
         environ["PYTHONPATH"] = os.pathsep.join(
             path for path in [os.getenv("PYTHONPATH"), qt_path]
@@ -192,8 +202,15 @@ class Server(object):
                 if not isinstance(value, str):
                     print("- Value of %s=%s is not <str>" % (key, value))
 
+        # Resolve the GUI from the same package as the host. Managed Python
+        # sitecustomize may put an older installed wheel ahead of PYTHONPATH.
+        package_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        bootstrap = (
+            "import sys, runpy; sys.path.insert(0, %r); "
+            "runpy.run_module('pyblish_qml', run_name='__main__', alter_sys=True)"
+        ) % package_root
         kwargs = dict(args=[
-            python, "-u", "-m", "pyblish_qml",
+            python, "-u", "-c", bootstrap,
 
             # Indicate that this is a child of the parent process,
             # and that it should expect to speak with the parent

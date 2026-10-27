@@ -40,6 +40,9 @@ class Proxy(object):
         self._self_destruct()
         self._listen()
 
+    def save_report(self, report):
+        return self._dispatch("save_report", args=[report])
+
     def stats(self):
         return self._dispatch("stats")
 
@@ -82,6 +85,9 @@ class Proxy(object):
         self.cached_context = ContextProxy.from_json(self._dispatch("context"))
         return self.cached_context
 
+    def publish_settings(self, instance_id, entries=None, enabled_ids=None):
+        return self._dispatch("publish_settings", args=[instance_id, entries, enabled_ids])
+
     def discover(self):
         self.cached_discover[:] = list()
         for plugin in self._dispatch("discover"):
@@ -91,6 +97,12 @@ class Proxy(object):
 
     def emit(self, signal, **kwargs):
         self._dispatch("emit", args=[signal, kwargs])
+
+    def set_instance_selection(self, states):
+        self._dispatch("set_instance_selection", args=[states])
+        for instance in self.cached_context:
+            if instance.id in states:
+                instance.data["publish"] = states[instance.id]
 
     def update(self, key, value, name):
         self._dispatch("update", args=[key, value, name])

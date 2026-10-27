@@ -20,6 +20,7 @@ Item {
 
     signal commentEntered(int index)
     signal instanceEntered(int index)
+    signal settingsEntered(int index)
     signal pluginEntered(int index)
 
     states: [
@@ -86,39 +87,12 @@ Item {
             anchors.fill: parent
             anchors.margins: parent.margins
 
-            List {
-                model: app.instanceProxy
-
-                width: Math.floor(parent.width / 2.0)  // To keep checkbox border from collapsing
+            InstanceBrowser {
+                width: Math.floor(parent.width / 2.0)
                 height: parent.height
-
-                section.property: "object.category"
-                section.delegate: SectionItem {
-                    text: section
-                    object: app.instanceProxy.itemByName(section)
-
-                    onSectionClicked: {
-                        app.hideSection(!hideState, text)
-                    }
-
-                    onLabelClicked: {
-                        checkState = !checkState
-                        app.toggleSection(checkState, text)
-                    }
-                }
-
-                onActionTriggered: function(action, index) {
-                    if (action.name == "solo")
-                        app.soloInstance(index)
-                    else if (action.name == "repair")
-                        app.repairInstance(index)
-                    else if (action.name == "enter")
-                        overview.instanceEntered(index)
-                    else if (action.name == "comment")
-                        overview.commentEntered(index)
-                }
-
-                onItemToggled: app.toggleInstance(index)
+                onSettingsEntered: function(index) { overview.settingsEntered(index) }
+                onInstanceEntered: function(index) { overview.instanceEntered(index) }
+                onCommentEntered: function(index) { overview.commentEntered(index) }
             }
 
             List {
@@ -223,10 +197,6 @@ Item {
         visible: overview.state != "initialising"
 
         mode:  overview.state == "publishing" ? 1 : overview.state == "finished" ? 2 : 0
-        instanceSelectionEnabled: overview.state == "" &&
-                                  app.optionalInstanceCount > 0
-        instanceSelectionSummary: app.enabledInstanceCount + " of " +
-                                  app.optionalInstanceCount + " enabled"
 
         width: parent.width
         anchors.bottom: parent.bottom
@@ -237,8 +207,6 @@ Item {
         onStop: app.stop()
         onSave: app.save()
         onComment: commentBox.height > 75 ? commentBox.down() : commentBox.up()
-        onEnableAllInstances: app.setAllInstancesToggled(true)
-        onDisableAllInstances: app.setAllInstancesToggled(false)
     }
 
     Connections {

@@ -167,6 +167,7 @@ class Application(QtGui.QGuiApplication):
     quitted = QtCore.Signal()
     published = QtCore.Signal()
     validated = QtCore.Signal()
+    sceneChangedByHost = QtCore.Signal(str)
 
     targeted = QtCore.Signal("QVariant")
 
@@ -188,6 +189,7 @@ class Application(QtGui.QGuiApplication):
         host = ipc.client.Proxy()
         controller = control.Controller(host, targets=targets, parent=window)
         controller.finished.connect(lambda: window.alert(0))
+        controller.quit_requested.connect(self.quit)
 
         context = engine.rootContext()
         context.setContextProperty("app", controller)
@@ -207,6 +209,7 @@ class Application(QtGui.QGuiApplication):
         self.quitted.connect(self.quit)
         self.published.connect(self.publish)
         self.validated.connect(self.validate)
+        self.sceneChangedByHost.connect(controller.invalidateScene)
 
         self.targeted.connect(self.target)
 
@@ -453,6 +456,7 @@ class Application(QtGui.QGuiApplication):
                     "quit": "quitted",
                     "publish": "published",
                     "validate": "validated",
+                    "sceneChanged": "sceneChangedByHost",
 
                     "target": "targeted",
 
@@ -523,5 +527,3 @@ def main(demo=False, aschild=False, targets=None):
         finally:
             if demo_host is not None:
                 demo_host.uninstall_callbacks()
-
-

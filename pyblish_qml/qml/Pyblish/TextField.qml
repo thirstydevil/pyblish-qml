@@ -95,7 +95,6 @@ TextEdit {
 
     color: Theme.dark.textColor
 
-    selectByMouse: true
     selectionColor: Theme.alpha(color, 0.5)
     selectedTextColor: Qt.darker(color, 2)
     selectByMouse: true

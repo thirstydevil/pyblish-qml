@@ -10,7 +10,7 @@ import pyblish.logic
 
 # Local libraries
 from . import util, models, version, settings
-from .vendor.Qt import QtCore
+from .vendor.Qt import QtCore, QtGui
 
 qtproperty = util.qtConstantProperty
 
@@ -26,6 +26,8 @@ class Controller(QtCore.QObject):
     hide = QtCore.Signal()
 
     firstRun = QtCore.Signal()
+    publishSettingsResult = QtCore.Signal(str)
+    reportActionsChanged = QtCore.Signal()
 
     collecting = QtCore.Signal()
     validating = QtCore.Signal()
@@ -47,6 +49,7 @@ class Controller(QtCore.QObject):
     ready = QtCore.Signal()
     saved = QtCore.Signal()
     finished = QtCore.Signal()
+    quit_requested = QtCore.Signal()
     initialised = QtCore.Signal()
     commented = QtCore.Signal(str, arguments=["name"])
     commenting = QtCore.Signal(str, str, arguments=["comment", "name"])
@@ -71,6 +74,12 @@ class Controller(QtCore.QObject):
         self.host = host
 
         self.targets = targets or []
+        self._quit_after_stop = False
+        self._scene_stale = False
+        self._scene_generation = None
+        self._scene_event_generation = None
+        self._report_saving = False
+        self._instance_selection_anchor = None
 
         self.data = {
             "models": {
@@ -86,9 +95,7 @@ class Controller(QtCore.QObject):
             "proxies": {
                 "item": models.ProxyModel(self.data["models"]["item"]),
 
-                "instance": models.ProxyModel(
-                    self.data["models"]["item"],
-                    includes={"itemType": ["instance"]}),
+                "instance": models.InstanceProxyModel(self.data["models"]["item"]),
 
                 "plugin": models.ProxyModel(
                     self.data["models"]["item"],
@@ -138,6 +145,7 @@ class Controller(QtCore.QObject):
                                       QtCore.Qt.QueuedConnection)
 
         self.state_changed.connect(self.on_state_changed)
+        self.state_changed.connect(lambda *_: self.reportActionsChanged.emit())
         self.commenting.connect(self.on_commenting)
 
     def on_show(self):
@@ -254,6 +262,7 @@ class Controller(QtCore.QObject):
 
         finished.addTransition(self.initialising, initialising)
         finished.addTransition(self.acting, acting)
+        finished.addTransition(self.validating, validating)
         initialising.addTransition(self.collecting, collecting)
         stopping.addTransition(self.acted, acted)
         stopping.addTransition(self.finished, finished)
@@ -505,8 +514,85 @@ class Controller(QtCore.QObject):
         return remaining_actions
 
     @QtCore.Slot(str)
+    def invalidateScene(self, generation):
+        self._scene_event_generation = generation
+        self._scene_stale = generation != self._scene_generation
+        if self._scene_stale:
+            self.data["models"]["result"].support_report()["scene_changed"] = True
+            self.info.emit(self.reportActionMessage)
+        self.reportActionsChanged.emit()
+
+    def _set_report_scene(self, context):
+        self._scene_generation = context.data.get("_jam_validation_scene", {}).get("generation")
+        self._scene_stale = bool(self._scene_event_generation and
+                                 self._scene_generation != self._scene_event_generation)
+        self.reportActionsChanged.emit()
+
+    @QtCore.Property(str, notify=reportActionsChanged)
+    def reportActionMessage(self):
+        return "Scene changed - reset and validate again." if self._scene_stale else ""
+
+    @QtCore.Property(bool, notify=reportActionsChanged)
+    def reportSaveEnabled(self):
+        return (not self._report_saving and not self.data["state"]["is_running"]
+                and any(state in self.states for state in ("ready", "finished")))
+
+    @QtCore.Property(bool, notify=reportActionsChanged)
+    def reportActionsEnabled(self):
+        return (not self._scene_stale and not self._report_saving
+                and not self.data["state"]["is_running"] and "acting" not in self.states
+                and any(state in self.states for state in ("ready", "finished")))
+
+    @QtCore.Slot()
+    def saveValidationReport(self):
+        if not self.reportSaveEnabled:
+            return self.error.emit("Wait for the current operation to finish before saving a report.")
+        # Snapshot before the file dialog, even if a scene-change notification
+        # arrives while the artist is choosing the destination.
+        report = json.loads(json.dumps(self.data["models"]["result"].support_report()))
+        self._report_saving = True
+        self.reportActionsChanged.emit()
+
+        def finished(result):
+            self._report_saving = False
+            self.reportActionsChanged.emit()
+            if isinstance(result, Exception):
+                self.error.emit("Could not save report: {}".format(result))
+            elif result.get("error"):
+                self.error.emit(result["error"])
+            elif result.get("path"):
+                self.info.emit("Saved validation report: " + result["path"])
+
+        util.defer(lambda: self.host.save_report(report), callback=finished)
+
+    @QtCore.Slot()
+    def copyValidationReport(self):
+        report = self.data["models"]["result"].support_report()
+        QtGui.QGuiApplication.clipboard().setText(json.dumps(report, ensure_ascii=False, indent=2))
+        self.info.emit("Copied this run's validation results and action history as JSON.")
+
+    @QtCore.Slot(str, str)
+    def runReportAction(self, report_id, action_id):
+        """Resolve a live card to a registered Pyblish Action; reject stale cards."""
+        if self.data["state"]["is_running"]:
+            return self.error.emit("Publisher is busy")
+        rows = self.data["models"]["result"].items
+        card = next((row for row in rows if row.reportId == report_id), None)
+        if card is None:
+            return self.error.emit("This report is no longer current. Validate again.")
+        offered = next((a for a in json.loads(card.reportActions) if a["id"] == action_id), None)
+        model = self.data["models"]["item"]
+        item = model.items.get(card.reportPluginId)
+        if offered is None or item is None or not any(a["id"] == action_id for a in item.actions):
+            return self.error.emit("This action is unavailable. Validate again.")
+        self.runPluginAction(json.dumps({"index": model.items.index(item), "id": action_id,
+                                        "reportRevalidate": bool(offered.get("revalidate"))}))
+
+    @QtCore.Slot(str)
     def runPluginAction(self, action):
-        if "acting" in self.states:
+        if self._scene_stale:
+            return self.error.emit(self.reportActionMessage)
+        if self._report_saving or self.data["state"]["is_running"] or "acting" in self.states:
             return self.error.emit("Busy")
 
         elif not any(state in self.states
@@ -515,6 +601,7 @@ class Controller(QtCore.QObject):
             return self.error.emit("Busy")
 
         action = json.loads(action)
+        self.data["state"]["is_running"] = True
 
         def run():
             util.echo("Running with states.. %s" % self.states)
@@ -543,6 +630,8 @@ class Controller(QtCore.QObject):
 
             self.data["state"]["is_running"] = False
             self.acted.emit()
+            if isinstance(result, Exception):
+                return self.error.emit("Action could not complete: {}. Validate again before publishing.".format(result))
 
             # Inform GUI of success or failure
             plugin = models["item"].plugins[result["plugin"]["id"]]
@@ -552,9 +641,126 @@ class Controller(QtCore.QObject):
             # Allow running action upon action, without resetting
             models["result"].update_with_result(result)
             self.info.emit("Success" if result["success"] else "Failed")
+            if action.get("reportRevalidate"):
+                # Check the real outcome even if a repair only partially completed.
+                # This invokes validators only; it cannot extract or publish.
+                QtCore.QTimer.singleShot(0, self.validate)
             util.echo("Finished with states.. %s" % self.states)
 
         util.defer(run, callback=on_finished)
+
+    @QtCore.Slot(int, str, bool)
+    def tagSettings(self, index, entries_json, apply_all):
+        if self._report_saving:
+            return self.error.emit("A report is being saved.")
+        if self._scene_stale:
+            return self.error.emit(self.reportActionMessage)
+        if not any(state in self.states for state in ("ready", "finished")):
+            self.publishSettingsResult.emit(json.dumps({"ok": False, "error": "Publisher is busy."}))
+            return
+        _, item = self._instance_from_proxy_index(index)
+        if item is None:
+            return
+        saving = bool(entries_json)
+        try:
+            entries = json.loads(entries_json) if saving else None
+        except ValueError as error:
+            self.publishSettingsResult.emit(json.dumps({"ok": False, "error": str(error)}))
+            return
+        instances = self.data["models"]["item"].instances
+        enabled = [entry.id for entry in instances if entry.isToggled] if apply_all else []
+        toggles = {entry.name: entry.isToggled for entry in instances if entry.optional}
+        def finished(result):
+            if isinstance(result, Exception):
+                result = {"ok": False, "error": str(result)}
+            result["saved"] = saving and result.get("ok", False)
+            self.publishSettingsResult.emit(json.dumps(result))
+            if result["saved"]:
+                self._tag_settings_toggles = toggles
+                self.reset()
+                self.info.emit("Options applied to tags. Save the Maya scene, then validate again.")
+        util.defer(lambda: self.host.publish_settings(item.id, entries, enabled), callback=finished)
+
+    @QtCore.Property(bool, notify=reportActionsChanged)
+    def instanceSelectionEditable(self):
+        return ("ready" in self.states and not self._scene_stale
+                and not self._report_saving and not self.data["state"]["is_running"])
+
+    @QtCore.Property(int, notify=instanceSelectionChanged)
+    def matchingInstanceCount(self):
+        return sum(1 for item in self.itemModel.instances
+                   if item.optional and self.instanceProxy.matches(item))
+
+    @QtCore.Property(int, notify=instanceSelectionChanged)
+    def hiddenEnabledInstanceCount(self):
+        return sum(1 for item in self.itemModel.instances
+                   if item.optional and item.isToggled and not self.instanceProxy.matches(item))
+
+    @QtCore.Property(int, notify=instanceSelectionChanged)
+    def pickedInstanceCount(self):
+        return sum(1 for item in self.itemModel.instances if item.optional and item.isPicked)
+
+    @QtCore.Property(int, notify=instanceSelectionChanged)
+    def requiredInstanceCount(self):
+        return sum(1 for item in self.itemModel.instances
+                   if item.name != "Context" and not item.optional and item.isToggled)
+
+    @QtCore.Slot(str)
+    def filterInstances(self, query):
+        self.instanceProxy.set_query(query)
+        self.instanceSelectionChanged.emit()
+
+    @QtCore.Slot(int, bool, bool)
+    def pickInstance(self, index, extend, range_select):
+        """Highlight stable instance IDs; checkboxes still control publishing."""
+        if not self.instanceSelectionEditable:
+            return
+        _, selected = self._instance_from_proxy_index(index)
+        if selected is None or not selected.optional:
+            return
+        visible = [self.instanceProxy.item(i) for i in range(self.instanceProxy.rowCount())]
+        visible = [item for item in visible if item.optional and not item.isHidden]
+        ids = [item.id for item in visible]
+        if range_select and self._instance_selection_anchor in ids and selected.id in ids:
+            start, end = sorted((ids.index(self._instance_selection_anchor), ids.index(selected.id)))
+            picked = set(ids[start:end + 1])
+        else:
+            picked = {selected.id}
+            self._instance_selection_anchor = selected.id
+        for item in self.itemModel.instances:
+            if not item.optional:
+                continue
+            if extend and not range_select:
+                if item.id == selected.id:
+                    item.isPicked = not item.isPicked
+            else:
+                item.isPicked = item.id in picked or (extend and item.isPicked)
+        self.instanceSelectionChanged.emit()
+
+    @QtCore.Slot()
+    def checkOnlyMatchingInstances(self):
+        if self.matchingInstanceCount:
+            self._set_optional_instances(self.instanceProxy.matches)
+
+    @QtCore.Slot()
+    def checkOnlyPickedInstances(self):
+        if self.pickedInstanceCount:
+            self._set_optional_instances(lambda item: item.isPicked)
+
+    def _apply_instance_selection(self, changes):
+        """One host request, then update UI; saved scene tag flags are untouched."""
+        if not changes:
+            return False
+        try:
+            self.host.set_instance_selection({item.id: enabled for item, enabled in changes})
+        except Exception as error:
+            self.error.emit("Could not change the publish selection: {}".format(error))
+            return False
+        for item, enabled in changes:
+            item.isToggled = enabled
+        self.itemModel.update_compatibility()
+        self.instanceSelectionChanged.emit()
+        return True
 
     def _instance_from_proxy_index(self, index):
         model = self.data["models"]["item"]
@@ -568,28 +774,12 @@ class Controller(QtCore.QObject):
         return source_index, model.items[source_index]
 
     def _set_optional_instances(self, predicate):
-        if "ready" not in self.states:
-            self.error.emit("Not ready")
+        if not self.instanceSelectionEditable:
+            self.error.emit("Reset the publisher before changing the selection.")
             return False
-
-        model = self.data["models"]["item"]
-        changed = False
-
-        for item in model.instances:
-            if not item.optional:
-                continue
-
-            enabled = bool(predicate(item))
-            if item.isToggled == enabled:
-                continue
-
-            self.__toggle_item(model, model.items.index(item))
-            changed = True
-
-        if changed:
-            self.instanceSelectionChanged.emit()
-
-        return changed
+        changes = [(item, bool(predicate(item))) for item in self.itemModel.instances
+                   if item.optional and item.isToggled != bool(predicate(item))]
+        return self._apply_instance_selection(changes)
 
     @QtCore.Slot(bool)
     def setAllInstancesToggled(self, enabled):
@@ -617,37 +807,21 @@ class Controller(QtCore.QObject):
 
     @QtCore.Slot(bool, str)
     def toggleSection(self, checkState, sectionLabel):
-        model = self.data["models"]["item"]
-        instance_changed = False
-
-        # Get all items' current toggle state
-        states = set()
-        for item in model.items:
-            if item.itemType == "instance" and sectionLabel == item.category:
-                if item.optional:
-                    states.add(item.isToggled)
-
-            if item.itemType == "plugin" and sectionLabel == item.verb:
-                if item.optional:
-                    states.add(item.isToggled)
-
+        model = self.itemModel
+        instances = [item for item in model.instances
+                     if item.category == sectionLabel and item.optional
+                     and self.instanceProxy.matches(item)]
+        plugins = [item for item in model.plugins
+                   if item.verb == sectionLabel and item.optional]
+        states = {item.isToggled for item in instances + plugins}
         if len(states) == 1:
-            # Use items' states instead of section state if all optional items
-            # are the same state.
             checkState = not states.pop()
-
-        for item in model.items:
-            if item.itemType == "instance" and sectionLabel == item.category:
-                if item.isToggled != checkState and item.optional:
-                    self.__toggle_item(model, model.items.index(item))
-                    instance_changed = True
-
-            if item.itemType == "plugin" and sectionLabel == item.verb:
-                if item.isToggled != checkState and item.optional:
-                    self.__toggle_item(model, model.items.index(item))
-
-        if instance_changed:
-            self.instanceSelectionChanged.emit()
+        if instances and self.instanceSelectionEditable:
+            self._apply_instance_selection([(item, checkState) for item in instances
+                                            if item.isToggled != checkState])
+        for item in plugins:
+            if item.isToggled != checkState:
+                self.__toggle_item(model, model.items.index(item))
 
     @QtCore.Slot(bool, str)
     def hideSection(self, hideState, sectionLabel):
@@ -761,10 +935,9 @@ class Controller(QtCore.QObject):
                            old_value=old_value)
 
         if item.itemType == "instance":
-            self.host.emit("instanceToggled",
-                           instance=item.id,
-                           new_value=new_value,
-                           old_value=old_value)
+            if self.instanceSelectionEditable:
+                self._apply_instance_selection([(item, new_value)])
+            return
 
         item.isToggled = new_value
         self.data["models"]["item"].update_compatibility()
@@ -857,6 +1030,10 @@ class Controller(QtCore.QObject):
             "message": "Finished"
         })
 
+        if self._quit_after_stop:
+            self._quit_after_stop = False
+            self.quit_requested.emit()
+
     def on_error(self, message):
         """An error has occurred"""
         util.echo(message)
@@ -872,7 +1049,23 @@ class Controller(QtCore.QObject):
 
     @QtCore.Slot()
     def stop(self):
+        if not self.data["state"]["is_running"]:
+            self.quit_requested.emit()
+            return
+
+        self._quit_after_stop = True
         self.data["state"]["is_running"] = False
+        cancel_file = os.getenv("PYBLISH_QML_CANCEL_FILE")
+        if cancel_file:
+            try:
+                with open(cancel_file, "w") as signal:
+                    signal.write("stop")
+            except OSError as error:
+                self.error.emit("Could not signal export cancellation: %s" % error)
+        self.info.emit(
+            "Stopping: cancelling isolated export workers. "
+            "Any active in-scene Maya operation must finish first."
+        )
         self.stopping.emit()
 
     @QtCore.Slot()
@@ -894,6 +1087,8 @@ class Controller(QtCore.QObject):
 
         """
 
+        if self._report_saving:
+            return self.error.emit("A report is being saved.")
         if not any(state in self.states for state in ("ready", "finished")):
             return self.error.emit("Not ready")
 
@@ -938,6 +1133,13 @@ class Controller(QtCore.QObject):
             context_item.currentProgress = 0
             context_item.label = context.data.get("label")
 
+            toggles = getattr(self, "_tag_settings_toggles", None)
+            if toggles is not None:
+                changes = [(item, toggles[item.name]) for item in self.itemModel.instances
+                           if item.optional and item.name in toggles
+                           and item.isToggled != toggles[item.name]]
+                self._apply_instance_selection(changes)
+                del self._tag_settings_toggles
             self.initialised.emit()
 
             self.instanceSelectionChanged.emit()
@@ -1033,6 +1235,7 @@ class Controller(QtCore.QObject):
                      callback_args=[plugins])
 
         def on_context(context):
+            self._set_report_scene(context)
             self._reset_log(
                 "received context with {0} instances".format(len(context))
             )
@@ -1063,6 +1266,10 @@ class Controller(QtCore.QObject):
 
         """
 
+        if self._report_saving:
+            return self.error.emit("A report is being saved.")
+        if self._scene_stale:
+            return self.error.emit(self.reportActionMessage)
         def get_data():
             model = self.data["models"]["item"]
 
@@ -1120,6 +1327,10 @@ class Controller(QtCore.QObject):
 
         """
 
+        if self._report_saving:
+            return self.error.emit("A report is being saved.")
+        if self._scene_stale:
+            return self.error.emit(self.reportActionMessage)
         def get_data():
             model = self.data["models"]["item"]
 
@@ -1280,6 +1491,10 @@ class Controller(QtCore.QObject):
 
         """
 
+        if self._report_saving:
+            return self.error.emit("A report is being saved.")
+        if self._scene_stale:
+            return self.error.emit(self.reportActionMessage)
         if "finished" not in self.states:
             self.error.emit("Not ready")
             return

@@ -1,13 +1,9 @@
 {
     "$schema": "http://json-schema.org/schema#",
-
     "title": "Result",
     "description": "Result from processing a (plugin, instance) pair",
-
     "type": "object",
-
     "additionalProperties": false,
-
     "properties": {
         "success": {
             "description": "Status of processing",
@@ -16,14 +12,22 @@
         "instance": {
             "description": "Name of processed instance or null if no instance were processed",
             "oneOf": [
-                {"$ref": "instance.json"},
-                {"type": "null"}
+                {
+                    "$ref": "instance.json"
+                },
+                {
+                    "type": "null"
+                }
             ]
         },
         "plugin": {
             "oneOf": [
-                {"$ref": "plugin.json"},
-                {"type": "null"}
+                {
+                    "$ref": "plugin.json"
+                },
+                {
+                    "type": "null"
+                }
             ]
         },
         "duration": {
@@ -32,8 +36,12 @@
         },
         "error": {
             "oneOf": [
-                {"$ref": "error.json"},
-                {"type": "null"}
+                {
+                    "$ref": "error.json"
+                },
+                {
+                    "type": "null"
+                }
             ]
         },
         "records": {
@@ -41,8 +49,37 @@
             "items": {
                 "$ref": "record.json"
             }
+        },
+        "report": {
+            "type": "object",
+            "required": [
+                "schema_version",
+                "checks"
+            ],
+            "properties": {
+                "schema_version": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "checks": {
+                    "type": "array",
+                    "items": {
+                        "type": "object"
+                    }
+                }
+            }
+        },
+        "error_info": {
+            "type": "object"
+        },
+        "action": {
+            "type": [
+                "string",
+                "null"
+            ]
         }
     },
-
     "definitions": {}
 }

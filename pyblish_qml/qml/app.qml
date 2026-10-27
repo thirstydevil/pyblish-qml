@@ -53,8 +53,19 @@ StackView {
             setup(app.instanceProxy.item(index), false)
         }
 
+        onSettingsEntered: function(index) {
+            stack.push(tagSettings, {"instanceIndex": index, "item": app.instanceProxy.item(index)})
+        }
+
         onPluginEntered: function(index) {
             setup(app.pluginProxy.item(index), false)
+        }
+    }
+
+    Component {
+        id: tagSettings
+        TagSettings {
+            onClosed: stack.pop()
         }
     }
 

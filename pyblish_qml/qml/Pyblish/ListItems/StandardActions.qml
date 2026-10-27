@@ -6,6 +6,10 @@ import Pyblish.ListItems 0.1
 MouseArea {
     id: listItem
 
+    signal picked(var mouse)
+    property bool selectable: false
+    property bool selected: false
+
     signal toggled(var mouse)
     signal rightClicked(var mouse)
 
@@ -20,9 +24,20 @@ MouseArea {
 
     property list<Action> actions
 
-    acceptedButtons: Qt.RightButton
+    acceptedButtons: selectable ? Qt.LeftButton | Qt.RightButton : Qt.RightButton
 
-    onClicked: rightClicked(mouse)
+    onClicked: function(mouse) {
+        if (mouse.button === Qt.RightButton) rightClicked(mouse)
+        else picked(mouse)
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        color: "transparent"
+        border.color: Theme.primaryColor
+        border.width: listItem.selected ? 1 : 0
+        radius: 2
+    }
 
     height: !listItem.hidden ? 20: 0
     visible: !listItem.hidden

@@ -51,8 +51,16 @@ class Service(object):
             "totalRequestCount": self._count,
         }
 
+    def _assert_current_scene(self):
+        if 'maya' in pyblish.api.registered_hosts():
+            from jam.core.publishing.scene import assert_current
+            assert_current(self._context)
+
     def reset(self):
         self._context = pyblish.api.Context()
+        if 'maya' in pyblish.api.registered_hosts():
+            from jam.core.publishing.scene import bind_context
+            bind_context(self._context)
         self._plugins = pyblish.api.discover()
         self._provider = pyblish.plugin.Provider()
 
@@ -72,6 +80,28 @@ class Service(object):
 
         return formatting.format_context(self._context)
 
+    def publish_settings(self, instance_id, entries=None, enabled_ids=None):
+        try:
+            self._assert_current_scene()
+            from jam.dcc.jam_maya import publish_settings
+            instance = self.__instances[instance_id]
+            tag = instance.data["tag"]
+            if entries is not None:
+                others = [item.data["tag"] for item in self._context
+                          if item.id in (enabled_ids or []) and item.id != instance_id
+                          and item.data.get("hasPublishSettings")]
+                count = publish_settings.save(tag, entries, others)
+                return {"ok": True, "count": count}
+            return {"ok": True, "name": instance.name,
+                    "sections": publish_settings.sections(tag)}
+        except Exception as error:
+            return {"ok": False, "error": str(error)}
+
+    def save_report(self, report):
+        # Export remains available for a report from the previous scene.
+        from ..report_export import save_report
+        return save_report(report)
+
     def discover(self):
         return formatting.format_plugins(self._plugins)
 
@@ -86,6 +116,8 @@ class Service(object):
 
         """
 
+        if action:
+            self._assert_current_scene()
         plugin_obj = self.__plugins[plugin["id"]]
         instance_obj = (self.__instances[instance["id"]]
                         if instance is not None else None)
@@ -99,6 +131,7 @@ class Service(object):
         return formatting.format_result(result)
 
     def repair(self, plugin, instance=None):
+        self._assert_current_scene()
         plugin_obj = self.__plugins[plugin["id"]]
         instance_obj = (self.__instances[instance["id"]]
                         if instance is not None else None)
@@ -140,6 +173,19 @@ class Service(object):
             kwargs["plugin"] = self.__plugins[kwargs["plugin"]]
 
         pyblish.api.emit(signal, **kwargs)
+
+    def set_instance_selection(self, states):
+        """Change this publish context only, never the enabled flags on scene tags."""
+        self._assert_current_scene()
+        instances = {instance.id: instance for instance in self._context}
+        # Validate the complete request before applying any changes.
+        for instance_id, enabled in states.items():
+            if instance_id not in instances or type(enabled) is not bool:
+                raise ValueError("Invalid publish selection")
+            if not instances[instance_id].data.get("optional", True):
+                raise ValueError("Required instances cannot be toggled")
+        for instance_id, enabled in states.items():
+            instances[instance_id].data["publish"] = enabled
 
     def update(self, key, value, name):
         """Write data to context from GUI"""

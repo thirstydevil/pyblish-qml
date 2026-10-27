@@ -1,8 +1,12 @@
 import re
+from fnmatch import fnmatchcase
+import json
+import uuid
 import time
 import logging
 
 from . import util, settings
+from .reporting import render_report, report_json
 from .vendor import six
 from .vendor.Qt import QtCore
 
@@ -12,10 +16,13 @@ defaults = {
         "id": "default",
         "name": "default",
         "isProcessing": False,
+        "hasPublishSettings": False,
+        "publishSettingsSummary": "",
         "families": list(),
         "familiesConcatenated": "",
         "isToggled": True,
         "isHidden": False,
+        "isPicked": False,
         "hasWarning": False,
         "hasError": False,
         "actionHasError": False,
@@ -56,6 +63,12 @@ defaults = {
         "hasComment": False,
     },
     "result": {
+        "reportHtml": "",
+        "reportId": "",
+        "reportPluginId": "",
+        "reportInstanceId": "",
+        "reportActions": "[]",
+        "reportDetails": "",
         "type": "default",
         "filter": "default",
         "message": "default",
@@ -474,6 +487,27 @@ class ItemModel(AbstractModel):
         self.instances.append(item)
 
     def update_with_result(self, result):
+        if result.get("action"):
+            return
+        key = (result["plugin"]["id"], (result.get("instance") or {}).get("id"))
+        latest = getattr(self, "_latest_results", {})
+        repeated = key in latest
+        latest[key] = result
+        self._latest_results = latest
+        if repeated:
+            for item in self.items:
+                for name in ("hasError", "hasWarning", "succeeded", "processed", "actionsIconVisible"):
+                    if hasattr(item, name):
+                        setattr(item, name, False)
+                for name in ("amountPassed", "amountFailed", "duration"):
+                    if hasattr(item, name):
+                        setattr(item, name, 0)
+            for current in latest.values():
+                self._apply_result(current)
+        else:
+            self._apply_result(result)
+
+    def _apply_result(self, result):
         """Update item-model with result from host
 
         State is sent from host after processing had taken place
@@ -600,6 +634,7 @@ class ItemModel(AbstractModel):
             plugin.hasCompatible = has_compatible
 
     def reset(self):
+        self._latest_results = {}
         self.instances[:] = []
         self.plugins[:] = []
         self.sections[:] = []
@@ -609,6 +644,16 @@ class ItemModel(AbstractModel):
 class ResultModel(AbstractModel):
 
     added = QtCore.Signal()
+
+    def support_report(self):
+        if not hasattr(self, "_run_report"):
+            self._run_report = {"schema_version": 1, "run_id": uuid.uuid4().hex, "results": []}
+        return self._run_report
+
+    def reset(self):
+        self._run_report = {"schema_version": 1, "run_id": uuid.uuid4().hex, "results": []}
+        self._last_plugin = None
+        super(ResultModel, self).reset()
 
     def add_item(self, item):
         item_ = defaults["result"].copy()
@@ -620,6 +665,12 @@ class ResultModel(AbstractModel):
             self.added.emit()
 
     def add_context(self, context):
+        # A support report describes the collected scene, never whichever scene
+        # happens to be open when an artist later saves it.
+        data = context["data"]
+        self.support_report()["context"] = json.loads(json.dumps({key: data[key] for key in (
+            "host", "user", "pythonVersion", "pyblishVersion", "pyblishQmlVersion",
+            "targets", "_jam_validation_scene") if key in data}))
         item = defaults["result"].copy()
         item.update(context["data"])
         item.update({
@@ -630,6 +681,15 @@ class ResultModel(AbstractModel):
         self.add_item(item)
 
     def update_with_result(self, result):
+        # Keep immutable diagnostics and actions apart from the current cards.
+        self.support_report()["results"].append(json.loads(json.dumps(result)))
+        # Replace the current report for this pair, retaining diagnostic records.
+        if not result.get("action"):
+            plugin_id = result["plugin"]["id"]
+            instance_id = (result.get("instance") or {}).get("id") or ""
+            for item in list(self.items):
+                if item.reportId and item.reportPluginId == plugin_id and item.reportInstanceId == instance_id:
+                    self.remove_item(item)
         parsed = self.parse_result(result)
 
         error = parsed.get("error")
@@ -709,6 +769,26 @@ class ResultModel(AbstractModel):
             error["instance"] = instance_name
 
             error_msg = error
+
+        report = result.get("report")
+        if report is not None:
+            try:
+                title, html, details = render_report(report)
+                original_error = result.get("error") or {}
+                technical = details + "\n\n" + str(original_error.get("message", ""))
+                error_msg = {
+                    "type": "error", "message": title, "filter": title,
+                    "plugin": plugin_name, "instance": instance_name,
+                    "reportHtml": html,
+                    "reportId": report.get("id", ""),
+                    "reportPluginId": result["plugin"]["id"],
+                    "reportInstanceId": (result.get("instance") or {}).get("id") or "",
+                    "reportActions": report_json(report.get("actions", [])),
+                    "reportDetails": technical + "\n\n" + report_json(report),
+                }
+            except (KeyError, TypeError, ValueError, AttributeError):
+                # Preserve ordinary records/error display if optional metadata is invalid.
+                pass
 
         return {
             "plugin": plugin_msg,
@@ -899,3 +979,27 @@ class ProxyModel(QtCore.QSortFilterProxyModel):
     def rowCount(self, parent=QtCore.QModelIndex()):
         return super(ProxyModel, self).rowCount(parent)
 
+
+
+class InstanceProxyModel(ProxyModel):
+    """Filter export names without changing the publish working set."""
+
+    def __init__(self, source, parent=None):
+        self.query = ""
+        super(InstanceProxyModel, self).__init__(
+            source, includes={"itemType": ["instance"]}, parent=parent)
+
+    def set_query(self, query):
+        self.query = query.strip().casefold()
+        self.invalidateFilter()
+
+    def matches(self, item):
+        if not self.query or item.name == "Context":
+            return True
+        pattern = "*{}*".format(self.query)
+        return any(fnmatchcase(str(getattr(item, field, "") or "").casefold(), pattern)
+                   for field in ("name", "label", "niceName"))
+
+    def filterAcceptsRow(self, source_row, source_parent):
+        return (super(InstanceProxyModel, self).filterAcceptsRow(source_row, source_parent)
+                and self.matches(self.sourceModel().items[source_row]))

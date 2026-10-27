@@ -42,7 +42,7 @@ Item {
                     },
                     {
                         type: "results",
-                        name: "Errors (" + app.errorProxy.rowCount() + ")",
+                        name: "Issues and reports (" + app.errorProxy.rowCount() + ")",
                         opened: app.errorProxy.rowCount() ? true : false,
                         model: app.errorProxy,
                         load: true
@@ -50,7 +50,7 @@ Item {
                     {
                         type: "results",
                         name: "Records (" + app.recordProxy.rowCount() + ")",
-                        opened: app.recordProxy.rowCount() ? true : false,
+                        opened: false,
                         model: app.recordProxy,
                         load: true,
                     },

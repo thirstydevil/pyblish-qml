@@ -16,6 +16,9 @@ class FakeHost(object):
     def __init__(self):
         self.events = []
 
+    def set_instance_selection(self, states):
+        self.events.append(('selection', dict(states)))
+
     def emit(self, signal, **kwargs):
         self.events.append((signal, kwargs))
 

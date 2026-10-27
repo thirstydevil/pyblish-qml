@@ -33,6 +33,24 @@ View {
 
         spacing: 3
 
+        FocusScope {
+            width: 25
+            height: 25
+            activeFocusOnTab: true
+            enabled: app.reportSaveEnabled
+            Keys.onReturnPressed: app.saveValidationReport()
+            Keys.onSpacePressed: app.saveValidationReport()
+            AwesomeButton {
+                elevation: 1
+                size: 25
+                iconSize: 14
+                name: "download"
+                tooltip: "Save run report..."
+                opacity: parent.enabled ? 1.0 : 0.5
+                onClicked: app.saveValidationReport()
+            }
+        }
+
         AwesomeButton {
             elevation: 1
 

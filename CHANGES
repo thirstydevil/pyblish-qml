@@ -1,6 +1,17 @@
 Changelog
 =========
 
+Version 1.16.6
+--------------
+
+- First release of the source synchronized on 2026-10-27 (see `DEPLOYED_SOURCE.md`): structured
+  validation feedback with legacy error fallback, report export, scene invalidation, instance browsing
+  and host-confirmed publish selection.
+- Add `pyblish_qml.hooks`, the extension points a pipeline fills in: a scene guard and a publish
+  settings provider, plus `notify_scene_changed`. The service no longer imports any pipeline code and
+  does nothing for a hook that is not registered.
+- The validation-scene snapshot travels under the fixed key `_validation_scene` (`hooks.SCENE_KEY`).
+
 Version 1.16.4
 --------------
 

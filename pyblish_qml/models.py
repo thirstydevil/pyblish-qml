@@ -5,7 +5,7 @@ import uuid
 import time
 import logging
 
-from . import util, settings
+from . import util, settings, hooks
 from .reporting import render_report, report_json
 from .vendor import six
 from .vendor.Qt import QtCore
@@ -670,7 +670,7 @@ class ResultModel(AbstractModel):
         data = context["data"]
         self.support_report()["context"] = json.loads(json.dumps({key: data[key] for key in (
             "host", "user", "pythonVersion", "pyblishVersion", "pyblishQmlVersion",
-            "targets", "_jam_validation_scene") if key in data}))
+            "targets", hooks.SCENE_KEY) if key in data}))
         item = defaults["result"].copy()
         item.update(context["data"])
         item.update({

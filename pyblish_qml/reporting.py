@@ -1,4 +1,4 @@
-"""Render optional JAM report dictionaries without a dependency on the host."""
+"""Render optional validation report dictionaries without a dependency on the host."""
 from html import escape
 import json
 

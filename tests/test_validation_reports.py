@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 import pyblish.api
 import pyblish.plugin
-from pyblish_qml import reporting, report_export
+from pyblish_qml import hooks, reporting, report_export
 from pyblish_qml.ipc import formatting, service
 
 
@@ -50,8 +50,8 @@ def test_records_render_format_arguments_before_transport():
 
 def test_scene_provenance_transport():
     context = pyblish.api.Context()
-    context.data['_jam_validation_scene'] = {'generation': 'one', 'path': 'scene.ma'}
-    assert formatting.format_context(context)['data']['_jam_validation_scene'] == context.data['_jam_validation_scene']
+    context.data[hooks.SCENE_KEY] = {'generation': 'one', 'path': 'scene.ma'}
+    assert formatting.format_context(context)['data'][hooks.SCENE_KEY] == context.data[hooks.SCENE_KEY]
 
 
 def test_atomic_report_export_and_input_preservation(tmp_path):

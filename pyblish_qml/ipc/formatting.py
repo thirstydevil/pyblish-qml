@@ -5,6 +5,7 @@ import inspect
 import traceback
 
 from . import schema
+from .. import hooks
 from ..vendor import six
 
 import pyblish.lib
@@ -165,7 +166,7 @@ def format_data(data):
         "optional",
 
         # Immutable validation-scene provenance, also retained in saved reports.
-        "_jam_validation_scene",
+        hooks.SCENE_KEY,
 
         # Provided by service.py
         "host",
